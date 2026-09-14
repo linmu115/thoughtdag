@@ -52,6 +52,63 @@ window.__ModuleLoader__.load({
       const mapSubscribers = new Set()
 
       const send = (type, payload) => frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin)
+      const graphJson = async path => {
+        const response = await fetch('/thoughtdag/api/managed/' + path, { credentials: 'same-origin' })
+        const value = await response.json()
+        if (!response.ok) throw new Error(value.error || '会话图暂不可用')
+        return value
+      }
+      const annotation = () => {
+        let core
+        try { core = ctx.get('annotationCore') } catch { /* optional plugin */ }
+        if (!core?.features?.includes('graph-reference-actions-v1')) throw new Error('当前注释插件尚未接入会话图，请安装匹配版本')
+        return core
+      }
+      const managedAction = async (operation, input) => {
+        if (!input || typeof input !== 'object') throw new Error('操作内容无效')
+        if (operation === 'open-session') {
+          const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
+          await ctx.sessions.refresh()
+          await ctx.sessions.open(target.nativeSessionId)
+          setMap(false); syncCurrent()
+          return target
+        }
+        if (operation === 'add-reference') {
+          const core = annotation()
+          const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.targetSessionId))
+          setMap(false)
+          return core.addCrossSessionReference(target.nativeSessionId, input.capture, { operationId: input.operationId })
+        }
+        if (operation === 'delete-reference') {
+          const core = annotation()
+          const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
+          const link = await core.resolveReferenceLink(target.nativeSessionId, input.referenceId)
+          if (!link) throw new Error('此会话中没有找到该引用')
+          if (link.state === 'deleted') return { deleted: true }
+          return core.deleteReferenceLink(target.nativeSessionId, link.setId, link.referenceId)
+        }
+        if (operation === 'open-object') {
+          if (!['annotation', 'obsidian-links'].includes(input.namespace)) throw new Error('未接入这个对象类型')
+          const detail = await graphJson('object?' + new URLSearchParams({ namespace: input.namespace, objectId: input.objectId }))
+          if (detail.object.deleted) throw new Error('该对象已删除')
+          const body = detail.object.content.body
+          if (input.namespace === 'obsidian-links') {
+            if (typeof body.vaultId !== 'string' || typeof body.notePath !== 'string') throw new Error('笔记位置不可用')
+            const file = body.notePath + (typeof body.blockId === 'string' ? '#^' + body.blockId : '')
+            location.href = 'obsidian://open?' + new URLSearchParams({ vault: body.vaultId, file })
+            return { opened: true }
+          }
+          const logical = detail.object.content.references?.[0]?.logicalSessionId
+          const query = logical ? { logicalSessionId: logical } : { nativeSessionId: body.sessionId }
+          const target = await graphJson('resolve?' + new URLSearchParams(query))
+          const core = annotation()
+          setMap(false)
+          const opened = await core.openAnnotationInSession(target.nativeSessionId, body.setId)
+          if (!opened) throw new Error('来源注释暂不可用')
+          return { opened: true }
+        }
+        throw new Error('不支持这个画布操作')
+      }
 
       const syncCurrent = () => {
         const session = currentSession()
@@ -102,8 +159,17 @@ window.__ModuleLoader__.load({
 
       backBtn.addEventListener('click', () => setMap(false))
 
-      window.addEventListener('message', event => {
-        if (event.origin !== location.origin || event.data?.source !== 'dsh-thoughtdag') return
+      const receive = event => {
+        if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.source !== 'dsh-thoughtdag') return
+        if (event.data.type === 'td:managed-request') {
+          const { requestId, operation, input } = event.data
+          if (typeof requestId !== 'string' || !requestId || requestId.length > 256) return
+          void managedAction(operation, input).then(
+            result => send('td:managed-result', { requestId, ok: true, result }),
+            error => send('td:managed-result', { requestId, ok: false, error: error instanceof Error ? error.message : '操作失败' }),
+          )
+          return
+        }
         if (event.data.type === 'td:close') return setMap(false)
         if (event.data.type === 'td:request-current') return syncCurrent()
         // the canvas forked or continued a session: stage it and go back to the
@@ -116,7 +182,9 @@ window.__ModuleLoader__.load({
           if (event.data.close !== false) setMap(false)
           syncCurrent()
         }
-      })
+      }
+      window.addEventListener('message', receive)
+      ctx.effect(() => () => { window.removeEventListener('message', receive); overlayHost.remove(); style.remove(); mapSubscribers.clear() }, 'thoughtdag: client lifetime')
     }
 
     return module.exports

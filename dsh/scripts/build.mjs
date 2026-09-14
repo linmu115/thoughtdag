@@ -4,15 +4,22 @@
 //   node scripts/build.mjs [thoughtdag-repo] [outDir]   (from dsh/: node scripts/build.mjs ..)
 //   npm run dsh:build                                  (from the repo root)
 import { execFileSync } from 'node:child_process'
-import { createRequire } from 'node:module'
-import { mkdirSync, rmSync, cpSync, existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { mkdirSync, rmSync, cpSync, existsSync, realpathSync } from 'node:fs'
+import { resolve, dirname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(process.argv[2] ?? process.env.THOUGHTDAG_REPO ?? resolve(__dirname, '../..'))
 const outDir = resolve(process.argv[3] ?? resolve(__dirname, '../dist-app'))
 const tmp = resolve(__dirname, '../.dist-tmp')
+const buildRoot = realpathSync(resolve(__dirname, '..'))
+for (const target of [tmp, outDir]) {
+  let existing = target
+  while (!existsSync(existing)) existing = dirname(existing)
+  const actual = realpathSync(existing)
+  if (!target.startsWith(buildRoot + sep) || (actual !== buildRoot && !actual.startsWith(buildRoot + sep)))
+    throw new Error('Build output must stay inside the plugin directory: ' + target)
+}
 
 if (!existsSync(resolve(repo, 'package.json'))) {
   console.error('thoughtdag repo not found at', repo)
@@ -39,30 +46,3 @@ mkdirSync(outDir, { recursive: true })
 cpSync(tmp, outDir, { recursive: true })
 rmSync(tmp, { recursive: true, force: true })
 console.log('plugin SPA written to', outDir)
-
-// The why layer: the CLI's library, bundled for the host (Node), so the plugin
-// registers the same four questions as native harness tools and a /why command
-// esbuild is the one tool that cannot run as a node script: its installer
-// overwrites bin/esbuild with the native binary on macOS and Linux (the JS
-// shim survives only on Windows), so node on it dies with a SyntaxError. Its
-// JS API locates the platform binary itself — the same flags as the root
-// `cli:build`, resolved from the repo's own esbuild, still no shell anywhere.
-const whyOut = resolve(__dirname, '../lib/why.mjs')
-await createRequire(resolve(repo, 'package.json'))('esbuild').build({
-  entryPoints: [resolve(repo, 'cli/src/lib.ts')],
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node22',
-  define: { 'import.meta.env': '{}' },
-  outfile: whyOut,
-  logLevel: 'warning',
-})
-console.log('why layer written to', whyOut)
-
-// The shared agent runtime (plain Node): the host serves it over HTTP so the
-// canvas inside the harness runs agents exactly as the desktop shell does
-const runtimeOut = resolve(__dirname, '../lib/runtime')
-rmSync(runtimeOut, { recursive: true, force: true })
-cpSync(resolve(repo, 'runtime'), runtimeOut, { recursive: true })
-console.log('agent runtime written to', runtimeOut)

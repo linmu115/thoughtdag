@@ -1,3 +1,5 @@
+> 本地修改分支：DSH 插件现适配 **0.1.5-rc.2**，接入 Maintenance 会话图谱与 Annotation 引用。当前插件说明见 [DSH 接入文档](dsh/MANAGED.md)。下方保留上游独立应用介绍；其中上游发布包的安装命令不会安装本地修改版。
+
 <div align="center">
 
 <img src="public/favicon.svg" width="72" alt="ThoughtDAG logo"/>

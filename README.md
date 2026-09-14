@@ -1,3 +1,5 @@
+> Local fork: the DSH plugin on this branch targets **0.1.5-rc.2** and uses the Maintenance session graph and Annotation reference services. Read [the current DSH integration guide](dsh/MANAGED.md). The upstream product description below remains relevant to the standalone app; its published plugin install commands do not install this local fork.
+
 <div align="center">
 
 <img src="public/favicon.svg" width="72" alt="ThoughtDAG logo"/>
