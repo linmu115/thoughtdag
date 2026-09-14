@@ -1,6 +1,6 @@
 # DSH 0.1.5-rc.2 会话图谱接入
 
-这是 `linmu115/thoughtdag` 的本地修改分支，以上游 `ef04210f6106a0dbc30f353cf67b25bee47d769c` 为基线。插件版本为 `0.4.14-rc2.1`。DSH 入口接入当前实例的 Maintenance 与 Annotation；仓库的独立应用仍保留上游能力。
+这是 `linmu115/thoughtdag` 的本地修改分支，以上游 `ef04210f6106a0dbc30f353cf67b25bee47d769c` 为基线。当前插件版本为 `0.4.14-rc2.5`。DSH 入口接入当前实例的 Maintenance 与 Annotation；仓库的独立应用仍保留上游能力。
 
 ## 已实现的使用流程
 
@@ -10,6 +10,8 @@
 4. 在已完成回复中选择文字，可以制作材料卡，或引用到另一会话；也可新建真实会话，形成分支来源。
 5. 引用会出现在目标会话草稿中。原有正文和附件保留，由用户在完整会话页发送。初次请求优先提供来源问题与所选回复，更早上下文由既有工具按需读取。
 6. 保存画布。多个画布可复用同一逻辑会话。移除卡片、移除线条呈现、解除上下文引用和移除画布是不同操作。
+7. 在“全局维护网络”检索会话、画布、贴纸、笔记或上下文引用。可按会话查看入向/出向引用，独立打开来源和目标完整会话。
+8. 查看来源更新影响后，选择需要重新讨论的项。操作只准备引用与说明，由用户检查后发送。
 
 已有注释/贴纸和笔记链接可从“关联对象”按需挂接。笔记卡片进入既有笔记，注释/贴纸卡片打开其既有来源对象；当前已实现的会话之间的引用无需这些可选对象域。
 
@@ -32,23 +34,24 @@
 - 预览单页完整 JSON 不超过 16,000 字节。长回复使用游标继续，不同时重送来源选择。
 - 保存采用修订比较；冲突保留当前窗口编辑，用户明确选择后才重新载入。异步切换期间暂停编辑，避免覆盖。
 - 图数据只写 Maintenance；此模式不启动 IndexedDB 会话持久化、自动备份、全文镜像或上游模型代理。
-- 来源版本变化后，画布中旧材料的浏览会明确失效；已发送 Annotation 引用继续使用原固定版本读取机制。
+- 来源追加后，画布材料继续按保存的版本和锚点展开，后续分页保持同一版本。版本被既有保留策略清理或不可读时，明确显示错误，不自动替换上下文，不新增全文备份。
 - 停用 ThoughtDAG 不清除图数据，不影响独立跨会话引用。恢复后重新读取已保存对象。
 
 ## 接入依赖
 
 需要实际 DSH `0.1.5-rc.2`，并安装包含以下能力的本地依赖源码构建：
 
-| 项目 | 必需能力 | 本次本地基线 |
-|---|---|---|
-| dsh-session-maintenance | `maintenanceGraph.protocolVersion === 1`，扩展存储，ThoughtDAG `0.4.14-rc2.1` schema，来源版本核对 | `1098d6b5796073ab8791582aa78d93cee5fdb46a` |
-| dsh-annotation-core | Client feature `graph-reference-actions-v1`，`addCrossSessionReference`、`resolveReferenceLink`，版本核对字段 | `028414357065b7f04ba8db5ea22f4702f8ded2f2` |
+| 项目 | 必需能力 |
+|---|---|
+| dsh-session-maintenance | `maintenanceGraph.protocolVersion === 1`，扩展存储，ThoughtDAG `0.4.14-rc2.5` 兼容登记，保留版本预览，`maintenanceKnowledge` 引用目录及方向查询 |
+| dsh-annotation-core | Client feature `graph-reference-actions-v1`，`addCrossSessionReference`、`resolveReferenceLink`，版本核对字段 |
+| 可选会话贴纸与笔记扩展 | `stickers` / `obsidian-links` 对象、稳定笔记身份及当前实例知识桥接 |
 
-维护插件的当前实例配置需要登记 `thoughtdag` 扩展，版本为 `0.4.14-rc2.1`，并使用该实例既有的稳定 writer ID 规则。必须保留其他已配置命名空间，不能用单独一项配置覆盖现有列表。跨会话引用继续需要既有 `annotation-upstream` 配置。
+维护插件的当前实例配置需要登记 `thoughtdag` 扩展，版本为 `0.4.14-rc2.5`，并使用该实例既有的稳定 writer ID 规则。必须保留其他已配置命名空间，不能用单独一项配置覆盖现有列表。跨会话引用继续需要既有 `annotation-upstream` 配置。
 
 公共协议由 Maintenance 的 `packages/contracts/src/session-graph.ts` 定义；平台完成事件只由 `adapter-dsh-0-1-5` 解释。ThoughtDAG Host 只调用绑定当前运行的服务，浏览器不能传入 run/profile/Engine 凭据选择另一实例。
 
-这次只交付本地源码提交，未更新运行副本。依赖仍保持原开发版本号，因此正式发布时需要按提交及构建产物核对组合、重新生成部署回执；不能仅按相同版本号认定副本已包含这些修改。
+运行副本安装由组合部署流程执行，需按源码提交、包摘要和实例登记核对匹配版本。本文的构建与隔离测试不代表用户数据已经完成迁移或模型调用验收。
 
 ## 开发与验证
 
@@ -68,6 +71,6 @@ node dsh/scripts/verify-rc2.mjs --runtime <official-rc2-runtime-root> --output <
 
 ## 与后续阶段的边界
 
-本次实现规格中的 P3 ThoughtDAG 接入，并补充必要公共接口。现有注释/贴纸、笔记对象可关联和导航。P2 中独立会话贴纸对象类型、Sticker Board 全面迁移、Vault 写入权切换仍需对应插件实现；拖出知识线不等于已经创建 Obsidian 原生双链。P4 全局维护网络、影响传播和自动重新执行继续留待后续。
+已接入 P2 扩展产生的独立会话贴纸/笔记对象及 P4 全局网络。旧贴纸和 Vault 写入权切换由对应扩展按迁移回执管理，不由画布复制正文。拖出知识线不等于已经创建笔记双链。跨运行实例自动接管、永久保留全部源版本和后台自动重新执行不属于当前行为。
 
 当前 DSH 入口不再提供上游插件的 `/disksessions` 全文扫描、直接 `/inject`、`/stream` 和跨代理全局历史工具；这些旧桥接路由返回明确的已停用状态。完整真实会话通过 DSH 自身打开，模型上下文通过统一引用能力获得。
