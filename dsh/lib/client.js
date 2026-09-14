@@ -4,8 +4,8 @@
 // on desktop and mobile web instead of floating over the title bar) and, on
 // "思维图", shows a full-screen SAME-ORIGIN iframe at /thoughtdag/ (the SPA
 // is served by the host half on the same web server — no CORS, no second
-// origin) with its own floating back pill, since the overlay covers the
-// header. All conversation smarts live inside the ThoughtDAG app; this file
+// origin) with the same view switch, since the overlay covers the header.
+// All conversation smarts live inside the ThoughtDAG app; this file
 // only opens the door and forwards the current session id so the canvas can
 // offer to mirror it.
 //
@@ -31,15 +31,15 @@ window.__ModuleLoader__.load({
       }
 
       const style = document.createElement('style')
-      style.textContent = '.dsh-td-switch{display:inline-flex;gap:2px;border:1px solid #d1d5db;border-radius:999px;background:rgba(255,255,255,.96);padding:3px;backdrop-filter:blur(10px)}.dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:#6b7280;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}.dsh-td-switch button:hover{background:#f3f4f6;color:#111827}.dsh-td-switch button.active{background:#111827;color:#fff}.dsh-td-back{position:fixed;z-index:130;top:12px;left:50%;transform:translateX(-50%);border:1px solid #d1d5db;border-radius:999px;background:rgba(255,255,255,.96);padding:5px 14px;color:#374151;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;backdrop-filter:blur(10px)}.dsh-td-back:hover{background:#f3f4f6;color:#111827}.dsh-td-overlay{position:fixed;z-index:100;inset:0;background:#faf9f7}.dsh-td-overlay[hidden]{display:none}.dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}'
+      style.textContent = '.dsh-td-switch{display:inline-flex;gap:2px;border:1px solid #d1d5db;border-radius:999px;background:rgba(255,255,255,.96);padding:3px;backdrop-filter:blur(10px)}.dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:#6b7280;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}.dsh-td-switch button:hover{background:#f3f4f6;color:#111827}.dsh-td-switch button.active{background:#111827;color:#fff}.dsh-td-canvas-switch{position:fixed;z-index:130;top:12px;left:50%;transform:translateX(-50%)}.dsh-td-overlay{position:fixed;z-index:100;inset:0;background:#faf9f7}.dsh-td-overlay[hidden]{display:none}.dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}'
       document.head.append(style)
 
       const overlayHost = document.createElement('div')
-      overlayHost.innerHTML = '<section class="dsh-td-overlay" hidden><button type="button" class="dsh-td-back">对话</button><iframe title="ThoughtDAG" data-src="/thoughtdag/"></iframe></section>'
+      overlayHost.innerHTML = '<section class="dsh-td-overlay" hidden><div class="dsh-td-switch dsh-td-canvas-switch" role="group" aria-label="view switch"><button type="button" data-view="dialog" aria-pressed="false">对话</button><button type="button" data-view="map" class="active" aria-pressed="true">思维图</button></div><iframe title="ThoughtDAG" data-src="/thoughtdag/"></iframe></section>'
       document.body.append(overlayHost)
       const overlay = overlayHost.querySelector('.dsh-td-overlay')
       const frame = overlayHost.querySelector('iframe')
-      const backBtn = overlayHost.querySelector('.dsh-td-back')
+      const canvasButtons = overlayHost.querySelectorAll('.dsh-td-canvas-switch button')
 
       // the plugin's version, for the canvas's update dialog and release history
       let pluginVersion = null
@@ -141,8 +141,14 @@ window.__ModuleLoader__.load({
       }
 
       const setMap = map => {
+        if (map === mapState) return
         mapState = map
         overlay.hidden = !map
+        for (const button of canvasButtons) {
+          const active = (button.dataset.view === 'map') === map
+          button.classList.toggle('active', active)
+          button.setAttribute('aria-pressed', String(active))
+        }
         for (const notify of mapSubscribers) notify(map)
         if (!map) { send('td:view', { shown: false }); return }
         // the SPA boots on first open, never while hidden: a canvas that
@@ -162,7 +168,7 @@ window.__ModuleLoader__.load({
           mapSubscribers.add(notify)
           return () => { mapSubscribers.delete(notify) }
         }, [])
-        return React.createElement('div', { className: 'dsh-td-switch', role: 'group', 'aria-label': 'view switch' },
+        return React.createElement('div', { className: 'dsh-td-switch', role: 'group', 'aria-label': 'view switch', 'aria-hidden': map ? 'true' : undefined },
           React.createElement('button', {
             type: 'button', 'data-view': 'dialog', className: map ? '' : 'active', 'aria-pressed': String(!map),
             onClick: () => setMap(false),
@@ -182,7 +188,7 @@ window.__ModuleLoader__.load({
         }, Switch),
       )
 
-      backBtn.addEventListener('click', () => setMap(false))
+      for (const button of canvasButtons) button.addEventListener('click', () => setMap(button.dataset.view === 'map'))
 
       const receive = event => {
         if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.source !== 'dsh-thoughtdag') return
