@@ -66,6 +66,22 @@ window.__ModuleLoader__.load({
       }
       const managedAction = async (operation, input) => {
         if (!input || typeof input !== 'object') throw new Error('操作内容无效')
+        if (operation === 'session-sticker') {
+          if (!document.querySelector('[data-dsh-knowledge="1"]')) throw new Error('请启用匹配的会话贴纸插件')
+          setMap(false)
+          window.dispatchEvent(new CustomEvent('dsh-session-sticker-open', { detail: input.capture ? { sessionId: input.capture.sourceSessionId, anchorId: input.capture.anchorId, selectedText: input.capture.selectedText } : undefined }))
+          return { opened: true }
+        }
+        if (operation === 'review-source') {
+          const target = await graphJson('resolve?logicalSessionId=' + encodeURIComponent(input.targetSessionId))
+          const preview = await graphJson('preview?logicalSessionId=' + encodeURIComponent(input.sourceSessionId))
+          if (!preview.capture) throw new Error('来源尚无已完成回复')
+          setMap(false)
+          const core = annotation()
+          const result = await core.addCrossSessionReference(target.nativeSessionId, { ...preview.capture, expectedSourceVersionId: preview.sourceVersionId }, { operationId: input.operationId })
+          await core.updateComment(target.nativeSessionId, result.referenceId, '来源有新内容。请结合这条最新来源，重新审视本会话相关回答，说明哪些判断需要调整。')
+          return { ...result, prepared: true }
+        }
         if (operation === 'open-session') {
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
           await ctx.sessions.refresh()
@@ -88,11 +104,20 @@ window.__ModuleLoader__.load({
           return core.deleteReferenceLink(target.nativeSessionId, link.setId, link.referenceId)
         }
         if (operation === 'open-object') {
-          if (!['annotation', 'obsidian-links'].includes(input.namespace)) throw new Error('未接入这个对象类型')
+          if (!['annotation', 'obsidian-links', 'stickers'].includes(input.namespace)) throw new Error('未接入这个对象类型')
           const detail = await graphJson('object?' + new URLSearchParams({ namespace: input.namespace, objectId: input.objectId }))
           if (detail.object.deleted) throw new Error('该对象已删除')
           const body = detail.object.content.body
+          if (input.namespace === 'stickers') {
+            const target = await graphJson('resolve?logicalSessionId=' + encodeURIComponent(body.logicalSessionId))
+            await ctx.sessions.refresh(); await ctx.sessions.open(target.nativeSessionId); setMap(false); syncCurrent()
+            return { opened: true }
+          }
           if (input.namespace === 'obsidian-links') {
+            if (body.kind === 'note-link' && body.note?.noteId) {
+              location.href = 'obsidian://deepharness-note?' + new URLSearchParams({ vault: body.note.vaultId, note: body.note.noteId, ...(body.note.blockId ? { block: body.note.blockId } : {}) })
+              return { opened: true }
+            }
             if (typeof body.vaultId !== 'string' || typeof body.notePath !== 'string') throw new Error('笔记位置不可用')
             const file = body.notePath + (typeof body.blockId === 'string' ? '#^' + body.blockId : '')
             location.href = 'obsidian://open?' + new URLSearchParams({ vault: body.vaultId, file })

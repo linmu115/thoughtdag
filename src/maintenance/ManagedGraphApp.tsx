@@ -7,11 +7,12 @@ import { acceptCanvasBody, addSessionNode, arrangeBySources, connectKnowledge, c
 import type { GraphNodeData, ManagedGraph, UpstreamRelation } from './model'
 import '@xyflow/react/dist/style.css'
 import './managed.css'
+import { KnowledgeNetwork } from './KnowledgeNetwork'
 
 type CanvasNode = Node<GraphNodeData, 'managed'>
 type Picker = { purpose: 'add' | 'reference'; capture?: Capture; sourceNodeId?: string; operationId: string }
 type Selection = { text: string; capture: Capture; preview: Preview }
-const OBJECT_TYPES = [{ namespace: 'annotation', label: '注释与贴纸引用', kind: 'sticker' as const }, { namespace: 'obsidian-links', label: '笔记引用', kind: 'note' as const }]
+const OBJECT_TYPES = [{ namespace: 'stickers', label: '会话贴纸与已迁移注释', kind: 'sticker' as const }, { namespace: 'annotation', label: '旧注释引用', kind: 'sticker' as const }, { namespace: 'obsidian-links', label: '笔记引用', kind: 'note' as const }]
 const EDGE_COLORS = { branch: '#d99143', upstream: '#8b7de6', knowledge: '#54929b' }
 const errorText = (error: unknown) => error instanceof Error ? error.message : '操作未完成，请重试。'
 
@@ -73,6 +74,7 @@ function SessionPicker({ purpose, canCreate, actionBusy, actionError, onClose, o
 }
 
 export default function ManagedGraphApp() {
+  const [network, setNetwork] = useState(false)
   const [status, setStatus] = useState<Status | null>(null)
   const [canvases, setCanvases] = useState<ExtensionObject[]>([])
   const [canvasCursor, setCanvasCursor] = useState<string | undefined>()
@@ -291,6 +293,8 @@ export default function ManagedGraphApp() {
     <aside className="mg-sidebar">
       <header className="mg-sidebar-title"><h1>会话图谱</h1><button disabled={busy || dirty || !status?.capabilities.storage} onClick={() => void createCanvas()} title={dirty ? '请先保存当前编辑' : '新建画布'}>＋</button></header>
       <p className="mg-subtitle">会话、材料与引用关系</p>
+      <button className="mg-quiet" disabled={busy} onClick={() => setNetwork(true)}>全局维护网络</button>
+      <button className="mg-quiet" disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', {}) })}>会话贴纸 · 新建 / 管理</button>
       <div className="mg-canvas-list">
         {canvases.filter((item) => item.deleted === showDeleted).map((item) => <button disabled={busy || (dirty && canvas?.objectId !== item.objectId)} key={item.objectId} className={`mg-canvas-item${canvas?.objectId === item.objectId ? ' active' : ''}`} onClick={() => { if (canvas?.objectId !== item.objectId) void run(() => loadCanvas(item.objectId)) }}><span>{item.title || '未命名画布'}</span><small>修订 {item.revision}{item.deleted ? ' · 已移除' : ''}</small></button>)}
         {canvasCursor && <button disabled={busy} onClick={() => void run(() => listCanvases(canvasCursor))}>加载更多画布</button>}
@@ -343,7 +347,7 @@ export default function ManagedGraphApp() {
                 <p className="mg-hint">按需读取已完成的局部问答。选中回复中的文字可制作材料卡或加入目标会话引用；不会自动发送。</p>
                 {previewBusy && <p>正在读取…</p>}{previewError && <p role="alert" className="mg-error">{previewError}</p>}
                 {preview?.items.map((item) => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '提问' : '回复'}{!item.complete ? ' · 分页片段' : ''}</small><div className="mg-source-text" onMouseUp={(event) => { if (item.role === 'assistant') captureSelection(event.currentTarget) }}>{item.text}</div></article>)}
-                {selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references || busy} onClick={() => { setError(''); setPicker({ purpose: 'reference', capture: selection.capture, sourceNodeId: selectedNode.id, operationId: crypto.randomUUID() }) }}>引用到会话</button></div>}
+                {selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references || busy} onClick={() => { setError(''); setPicker({ purpose: 'reference', capture: selection.capture, sourceNodeId: selectedNode.id, operationId: crypto.randomUUID() }) }}>引用到会话</button><button disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', { capture: selection.capture }) })}>建立会话贴纸</button></div>}
                 {preview?.nextCursor && <button disabled={previewBusy} onClick={() => void loadPreview(preview.nextCursor ?? undefined)}>继续读取这一来源</button>}
                 {!previewBusy && !previewError && preview && preview.items.length === 0 && <p>暂时没有可读取的已完成回复。</p>}
               </div>}
@@ -353,6 +357,7 @@ export default function ManagedGraphApp() {
         </div>
       </> : <div className="mg-welcome"><h2>让会话与材料在画布上相连</h2><p>创建或打开一份画布。会话按需展开，引用通过统一工具读取上游。</p><button className="mg-primary" disabled={busy || !status?.capabilities.storage} onClick={() => void createCanvas()}>新建画布</button>{!status && !busy && <button onClick={() => void refreshStatus()}>重新连接</button>}</div>}
     </main>
+    {network && <KnowledgeNetwork onClose={() => setNetwork(false)} onCanvas={async objectId => { if (dirty) throw new Error('请先保存当前画布，再打开另一份画布'); await loadCanvas(objectId); setNetwork(false) }} />}
     {picker && <SessionPicker purpose={picker.purpose === 'reference' ? '引用到会话' : '添加真实会话'} canCreate={!busy} actionBusy={busy} actionError={error} onClose={() => { if (!busy) setPicker(null) }} onSelect={(item) => void chooseSession(item)} onCreate={() => void createSession()} />}
   </div>
 }

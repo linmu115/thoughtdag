@@ -49,7 +49,14 @@ export const managedApi = {
   createSession: (operationId: string) => request<SessionIdentity>('create-session', {}, { operationId }),
 }
 
-type ParentOperation = 'open-session' | 'add-reference' | 'delete-reference' | 'open-object'
+type ParentOperation = 'open-session' | 'add-reference' | 'delete-reference' | 'open-object' | 'session-sticker' | 'review-source'
+
+export async function knowledgeRequest<T>(operation: string, input: Record<string, unknown> = {}): Promise<T> {
+  const response = await fetch('/maintenance-knowledge/api/' + operation, {method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body:JSON.stringify(input), signal:AbortSignal.timeout(30000)})
+  const value = await response.json()
+  if (!response.ok) throw new Error(value.error?.message ?? '知识网络暂不可用')
+  return value
+}
 
 export function parentRequest<T = unknown>(operation: ParentOperation, input: unknown): Promise<T> {
   if (window.parent === window) return Promise.reject(new Error('请从当前实例的图谱面板打开，才能进入会话或操作引用。'))

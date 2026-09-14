@@ -48,7 +48,13 @@ const bridge = {
     return { status: 'saved', object }
   },
 }
-const ctx = { get: name => ({ maintenanceGraph: graph, maintenanceExtensionData: { bridge }, maintenanceSessionContext: { protocolVersion: 1 } })[name],
+const knowledge = { request: async(operation,input) => {
+  if(operation==='network')return {items:[...identities.map(s=>({key:'session:'+s.logicalSessionId,kind:'session',title:s.title,logicalSessionIds:[s.logicalSessionId],deleted:false,conflicts:0,available:true})),...objects.values()].filter(item=>item.kind&&(!input.query||item.title.includes(input.query))),nextCursor:null}
+  if(operation==='impact')return {sourceLogicalSessionId:input.logicalSessionId,visited:2,truncated:false,items:[{referenceId:'impact-ref',sourceSessionId:'logical-source',targetSessionId:'logical-target',title:'显存实验记录',sourceVersionId:'old-version',currentSourceVersionId:'version-1',sourceAnchorId:'answer-1',status:'new-content',depth:1}]}
+  if(operation==='list')return {items:[],nextCursor:null}
+  throw new Error('Unexpected knowledge operation')
+} }
+const ctx = { get: name => ({ maintenanceGraph: graph, maintenanceKnowledge:knowledge, maintenanceExtensionData: { bridge }, maintenanceSessionContext: { protocolVersion: 1 } })[name],
   sessions: new Map(), sessionController: {}, webServer: { register: route => { routes.push(route); return () => {} } }, effect: fn => fn(), logger: { info() {} } }
 await apply(ctx)
 const parentHtml = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="toolbar"></div>
@@ -56,6 +62,7 @@ const parentHtml = `<!doctype html><html><head><meta charset="utf-8"></head><bod
 window.fixture = { current:'native-source', draft:'目标会话原有草稿', actions:[] };
 const sessions = { list:{getSnapshot:()=>({current:fixture.current,byId:{'native-source':{displayTitle:'训练优化讨论'},'native-target':{displayTitle:'显存实验记录'}}})},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})} };
 const annotation = { features:['graph-reference-actions-v1'],
+ updateComment:async(target,referenceId,comment)=>{fixture.actions.push({operation:'comment',target,referenceId,comment})},
  addCrossSessionReference:async(target,capture,options)=>{if(capture.expectedSourceVersionId!=='version-1')throw Error('缺少来源版本核对');fixture.current=target;fixture.actions.push({operation:'reference',target,capture,options});return{setId:'set-1',referenceId:'ref-1',created:true}},
  resolveReferenceLink:async()=>({setId:'set-1',referenceId:'ref-1',state:'pending'}),deleteReferenceLink:async()=>({deleted:true}) };
 const react = { useState:value=>[value,()=>{}],useEffect:fn=>fn(),createElement:(tag,props,...children)=>{const el=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='onClick')el.onclick=v;else if(k==='className')el.className=v;else if(v!==undefined)el.setAttribute(k,v)}for(const c of children.flat())el.append(c instanceof Node?c:String(c));return el} };
@@ -66,6 +73,7 @@ const server = createServer(async (req, res) => {
   if (req.url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(parentHtml) }
   if (req.url === '/client.js') { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); return res.end(await readFile(new URL('../lib/client.js', import.meta.url))) }
   const path = new URL(req.url, 'http://fixture').pathname
+  if(path.startsWith('/maintenance-knowledge/api/')) { const chunks=[];for await(const chunk of req)chunks.push(chunk);try{const value=await knowledge.request(path.split('/').at(-1),JSON.parse(Buffer.concat(chunks).toString()));res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify(value))}catch(e){res.writeHead(409,{'content-type':'application/json'});return res.end(JSON.stringify({error:{message:e.message}}))} }
   const route = routes.find(r => r.kind === 'exact' ? path === r.path : path.startsWith(r.path + '/'))
   if (!route) { res.writeHead(404); return res.end() }
   try { await route.handler(req, res) } catch (error) { res.writeHead(500); res.end(error.message) }
@@ -141,6 +149,22 @@ try {
   await frame.getByRole('button', { name: '恢复画布', exact: true }).click()
   await frame.getByText('画布已保存。', { exact: true }).waitFor()
   checks.push('CAS conflict keeps edits, explicit reload, trash list and restore')
+  await frame.getByRole('button',{name:'全局维护网络',exact:true}).click()
+  await frame.locator('.mg-network-list article').filter({hasText:'训练优化讨论'}).getByRole('button',{name:'查看影响',exact:true}).click()
+  await frame.getByText('来源有新内容，待你判断',{exact:true}).waitFor()
+  const referencesBefore=await page.evaluate(()=>fixture.actions.filter(a=>a.operation==='reference').length)
+  await frame.locator('.mg-impact-row input').check()
+  assert.equal(await page.evaluate(()=>fixture.actions.filter(a=>a.operation==='reference').length),referencesBefore)
+  await frame.getByRole('button',{name:/准备下一条重新回答/}).click()
+  await page.waitForFunction(()=>fixture.actions.some(a=>a.operation==='comment'))
+  assert.equal(await page.evaluate(()=>fixture.draft),'目标会话原有草稿')
+  assert.equal(await page.evaluate(()=>fixture.actions.filter(a=>a.operation==='reference').length),referencesBefore+1)
+  assert.match(await page.evaluate(()=>fixture.actions.find(a=>a.operation==='comment').comment),/来源有新内容/)
+  await page.getByRole('button',{name:'思维图',exact:true}).click()
+  await frame.getByRole('button',{name:/准备下一条重新回答（已选 0/}).waitFor()
+  await page.screenshot({path:resolve(output,'knowledge-network.png'),fullPage:true})
+  await frame.getByRole('button',{name:'关闭',exact:true}).click()
+  checks.push('global source-impact network prepares only the explicitly chosen reply with original draft preserved and no automatic send')
   assert.equal(requests.some(path => /disksessions|\/stream|\/roots|\/inject|\/latest/.test(path)), false)
   assert.deepEqual(errors, [])
   await writeFile(resolve(output, 'result.json'), JSON.stringify({ passed: true, synthetic: true, modelCalls: 0, checks, pageErrors: errors, screenshots: ['managed-canvas.png'] }, null, 2))

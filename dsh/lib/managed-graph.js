@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
 const NAMESPACE = 'thoughtdag'
-const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links'])
+const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links', 'stickers'])
 const MAX_BYTES = 512 * 1024
 
 export class ManagedGraphError extends Error {
@@ -98,8 +98,25 @@ export function createManagedGraph(ctx) {
       if (operation === 'relations') return graph.relations(after)
       if (operation === 'canvases') return bridge.list(NAMESPACE, after, 'all')
       if (operation === 'canvas') return bridge.get(NAMESPACE, id(query.get('objectId'), '画布身份'))
-      if (operation === 'objects') return bridge.list(objectNamespace(query.get('namespace')), after)
-      if (operation === 'object') return bridge.get(objectNamespace(query.get('namespace')), id(query.get('objectId'), '对象身份'))
+      if (operation === 'objects') {
+        const namespace = objectNamespace(query.get('namespace'))
+        if (namespace === 'stickers') {
+          const knowledge = service(ctx, 'maintenanceKnowledge')
+          if (!knowledge) throw new ManagedGraphError(503, '请升级知识数据适配器')
+          const page = await knowledge.request('list', { namespace, ...(after ? { after } : {}) })
+          return { ...page, items: page.items.map(o => ({ objectId: o.objectId, title: o.content.title, revision: o.revision, scope: o.scope, schemaVersion: o.content.schemaVersion, deleted: o.deleted })) }
+        }
+        return bridge.list(namespace, after)
+      }
+      if (operation === 'object') {
+        const namespace = objectNamespace(query.get('namespace')), objectId = id(query.get('objectId'), '对象身份')
+        if (namespace === 'stickers') {
+          const knowledge = service(ctx, 'maintenanceKnowledge')
+          if (!knowledge) throw new ManagedGraphError(503, '请升级知识数据适配器')
+          return { object: await knowledge.request('get', { namespace, objectId }) }
+        }
+        return bridge.get(namespace, objectId)
+      }
     }
     if (method === 'POST' && operation === 'save') {
       const objectId = id(input.objectId, '画布身份')
