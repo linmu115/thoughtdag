@@ -31,7 +31,7 @@ window.__ModuleLoader__.load({
       }
 
       const style = document.createElement('style')
-      style.textContent = '.dsh-td-switch{display:inline-flex;gap:2px;border:1px solid #d1d5db;border-radius:999px;background:rgba(255,255,255,.96);padding:3px;backdrop-filter:blur(10px)}.dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:#6b7280;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}.dsh-td-switch button:hover{background:#f3f4f6;color:#111827}.dsh-td-switch button.active{background:#111827;color:#fff}.dsh-td-canvas-switch{position:fixed;z-index:130;top:12px;left:50%;transform:translateX(-50%)}.dsh-td-overlay{position:fixed;z-index:100;inset:0;background:#faf9f7}.dsh-td-overlay[hidden]{display:none}.dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}'
+      style.textContent = '.dsh-td-switch{display:inline-flex;gap:2px;border:1px solid #d1d5db;border-radius:999px;background:rgba(255,255,255,.96);padding:3px;backdrop-filter:blur(10px)}.dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:#6b7280;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}.dsh-td-switch button:hover{background:#f3f4f6;color:#111827}.dsh-td-switch button.active{background:#111827;color:#fff}.dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}.dsh-td-overlay{position:fixed;z-index:100;inset:0;background:#faf9f7}.dsh-td-overlay[hidden]{display:none}.dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}'
       document.head.append(style)
 
       const overlayHost = document.createElement('div')
@@ -39,6 +39,7 @@ window.__ModuleLoader__.load({
       document.body.append(overlayHost)
       const overlay = overlayHost.querySelector('.dsh-td-overlay')
       const frame = overlayHost.querySelector('iframe')
+      const canvasSwitch = overlayHost.querySelector('.dsh-td-canvas-switch')
       const canvasButtons = overlayHost.querySelectorAll('.dsh-td-canvas-switch button')
 
       // the plugin's version, for the canvas's update dialog and release history
@@ -50,6 +51,18 @@ window.__ModuleLoader__.load({
       // 契约——session 作用域槽位的 inject 首参是 sessionKey，签名因槽位而异。
       let mapState = false
       const mapSubscribers = new Set()
+      let headerSwitch = null
+      const positionCanvasSwitch = () => {
+        if (!headerSwitch?.isConnected) return
+        const { left, top, width, height } = headerSwitch.getBoundingClientRect()
+        if (!width || !height) return
+        Object.assign(canvasSwitch.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px' })
+      }
+      const updateCanvasPosition = () => { if (mapState) positionCanvasSwitch() }
+      // Keep the covered header as the layout anchor, including sidebar/viewport changes.
+      const positionObserver = new ResizeObserver(updateCanvasPosition)
+      window.addEventListener('resize', updateCanvasPosition)
+      window.addEventListener('scroll', updateCanvasPosition, true)
 
       const send = (type, payload) => frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin)
       const graphJson = async path => {
@@ -142,6 +155,13 @@ window.__ModuleLoader__.load({
 
       const setMap = map => {
         if (map === mapState) return
+        positionObserver.disconnect()
+        if (map) {
+          headerSwitch = [...document.querySelectorAll('.dsh-td-header-switch')].find(element => element.getBoundingClientRect().width > 0)
+          if (!headerSwitch) return
+          positionCanvasSwitch()
+          for (let element = headerSwitch; element && element !== document.body; element = element.parentElement) positionObserver.observe(element)
+        }
         mapState = map
         overlay.hidden = !map
         for (const button of canvasButtons) {
@@ -168,7 +188,7 @@ window.__ModuleLoader__.load({
           mapSubscribers.add(notify)
           return () => { mapSubscribers.delete(notify) }
         }, [])
-        return React.createElement('div', { className: 'dsh-td-switch', role: 'group', 'aria-label': 'view switch', 'aria-hidden': map ? 'true' : undefined },
+        return React.createElement('div', { className: 'dsh-td-switch dsh-td-header-switch', role: 'group', 'aria-label': 'view switch', 'aria-hidden': map ? 'true' : undefined },
           React.createElement('button', {
             type: 'button', 'data-view': 'dialog', className: map ? '' : 'active', 'aria-pressed': String(!map),
             onClick: () => setMap(false),
@@ -215,7 +235,13 @@ window.__ModuleLoader__.load({
         }
       }
       window.addEventListener('message', receive)
-      ctx.effect(() => () => { window.removeEventListener('message', receive); overlayHost.remove(); style.remove(); mapSubscribers.clear() }, 'thoughtdag: client lifetime')
+      ctx.effect(() => () => {
+        window.removeEventListener('message', receive)
+        window.removeEventListener('resize', updateCanvasPosition)
+        window.removeEventListener('scroll', updateCanvasPosition, true)
+        positionObserver.disconnect()
+        overlayHost.remove(); style.remove(); mapSubscribers.clear()
+      }, 'thoughtdag: client lifetime')
     }
 
     return module.exports

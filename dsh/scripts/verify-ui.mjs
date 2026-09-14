@@ -57,7 +57,7 @@ const knowledge = { request: async(operation,input) => {
 const ctx = { get: name => ({ maintenanceGraph: graph, maintenanceKnowledge:knowledge, maintenanceExtensionData: { bridge }, maintenanceSessionContext: { protocolVersion: 1 } })[name],
   sessions: new Map(), sessionController: {}, webServer: { register: route => { routes.push(route); return () => {} } }, effect: fn => fn(), logger: { info() {} } }
 await apply(ctx)
-const parentHtml = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="toolbar"></div>
+const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>#toolbar{margin:12px 0 0 18vw;width:max-content}</style></head><body><div id="toolbar"></div>
 <script>
 window.fixture = { current:'native-source', draft:'目标会话原有草稿', actions:[] };
 const sessions = { list:{getSnapshot:()=>({current:fixture.current,byId:{'native-source':{displayTitle:'训练优化讨论'},'native-target':{displayTitle:'显存实验记录'}}})},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})} };
@@ -89,18 +89,31 @@ const checks = []
 try {
   await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort())
   await page.goto(origin)
+  const headerSwitch = page.locator('.dsh-td-header-switch')
+  const sameBounds = (actual, expected) => {
+    for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(actual[key] - expected[key]) <= 0.5, key + ' moved between views')
+  }
+  const headerBounds = await headerSwitch.boundingBox()
   await page.getByRole('button', { name: '思维图', exact: true }).click()
   const canvasSwitch = page.locator('.dsh-td-canvas-switch')
+  sameBounds(await canvasSwitch.boundingBox(), headerBounds)
   assert.equal(await canvasSwitch.getByRole('button').count(), 2)
   assert.equal(await canvasSwitch.getByRole('button', { name: '思维图', exact: true }).getAttribute('aria-pressed'), 'true')
   assert.equal(await canvasSwitch.getByRole('button', { name: '对话', exact: true }).getAttribute('aria-pressed'), 'false')
   const canvasUrl = await page.locator('iframe').getAttribute('src')
   await canvasSwitch.getByRole('button', { name: '对话', exact: true }).click()
   assert.equal(await page.locator('.dsh-td-overlay').isVisible(), false)
+  sameBounds(await headerSwitch.boundingBox(), headerBounds)
   await page.getByRole('button', { name: '思维图', exact: true }).click()
   assert.equal(await page.locator('iframe').getAttribute('src'), canvasUrl)
   assert.equal(await canvasSwitch.getByRole('button', { name: '思维图', exact: true }).getAttribute('aria-pressed'), 'true')
   checks.push('both views retain the same two-way switch and canvas state survives the return trip')
+  for (const width of [900, 390, 1440]) {
+    await page.setViewportSize({ width, height: 960 })
+    await page.waitForFunction(() => Math.abs(document.querySelector('.dsh-td-canvas-switch').getBoundingClientRect().left - document.querySelector('.dsh-td-header-switch').getBoundingClientRect().left) <= 0.5)
+    sameBounds(await canvasSwitch.boundingBox(), await headerSwitch.boundingBox())
+  }
+  checks.push('switch position and size match the header on both views, including narrow viewport changes')
   const frame = page.frameLocator('iframe')
   await frame.getByRole('button', { name: '新建画布', exact: true }).click()
   await frame.getByRole('textbox', { name: '画布名称' }).fill('训练显存讨论')
