@@ -11,3 +11,9 @@ DSH 插件 0.4.14-rc2.4。之前会话页开关随顶栏布局，画布页开关
 - 副本安装后另外比较真实 DSH 页面两端开关的位置。安装及实际验证回执位于 D:/AI/DeepSeekHarness-Plugin/artifacts/view-switch-position-20260914。
 
 本次只调整开关布局，原生会话、引用和图结构的读写行为不变。
+
+## 运行副本验证
+
+2026-09-14T08:55:36.350Z 已在 0.1.5-rc.2 副本实际验证 ThoughtDAG 0.4.14-rc2.4。切换前后以及窗口宽度 1440、900、390 像素下，开关横纵坐标和宽高的最大差值为 0 CSS 像素。返回对话位置一致，画布和面板状态保持。页面异常为 0，19 个宿主插件检查通过。副本已正常启动，主实例配置保持不变。
+
+实际记录：D:/AI/DeepSeekHarness-Plugin/artifacts/view-switch-position-20260914/live-validation.json；切换前后截图为 dialog-position.png、canvas-position.png。
