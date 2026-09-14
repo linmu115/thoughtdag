@@ -49,7 +49,15 @@ export const managedApi = {
   createSession: (operationId: string) => request<SessionIdentity>('create-session', {}, { operationId }),
 }
 
-type ParentOperation = 'open-session' | 'add-reference' | 'delete-reference' | 'open-object' | 'session-sticker' | 'review-source'
+type ParentInputs = {
+  'open-session': { nativeSessionId: string }
+  'add-reference': { targetSessionId: string; capture: Capture; operationId: string }
+  'delete-reference': { nativeSessionId: string; referenceId: string }
+  'open-object': { namespace: string; objectId: string }
+  'session-sticker': { capture?: Capture }
+  'review-source': { targetSessionId: string; sourceSessionId: string; operationId: string }
+}
+type ParentRequestArgs = { [Operation in keyof ParentInputs]: [operation: Operation, input: ParentInputs[Operation]] }[keyof ParentInputs]
 
 export async function knowledgeRequest<T>(operation: string, input: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch('/maintenance-knowledge/api/' + operation, {method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body:JSON.stringify(input), signal:AbortSignal.timeout(30000)})
@@ -58,7 +66,7 @@ export async function knowledgeRequest<T>(operation: string, input: Record<strin
   return value
 }
 
-export function parentRequest<T = unknown>(operation: ParentOperation, input: unknown): Promise<T> {
+export function parentRequest<T = unknown>(...[operation, input]: ParentRequestArgs): Promise<T> {
   if (window.parent === window) return Promise.reject(new Error('请从当前实例的图谱面板打开，才能进入会话或操作引用。'))
   const requestId = crypto.randomUUID()
   return new Promise((resolve, reject) => {

@@ -338,13 +338,13 @@ export default function ManagedGraphApp() {
               {selectedNode.data.excerpt && <blockquote>{selectedNode.data.excerpt}</blockquote>}
               <div className="mg-detail-actions">
                 {selectedNode.data.logicalSessionId && <button className="mg-primary" disabled={busy || !status?.capabilities.sessions} onClick={() => void run(() => openSession(selectedNode.data.logicalSessionId!))}>打开完整会话</button>}
-                {selectedNode.data.objectId && selectedNode.data.namespace && <button disabled={busy} onClick={() => void run(async () => { await parentRequest('open-object', { namespace: selectedNode.data.namespace, objectId: selectedNode.data.objectId }) })}>打开来源对象</button>}
+                {selectedNode.data.objectId && selectedNode.data.namespace && <button disabled={busy} onClick={() => void run(async () => { await parentRequest('open-object', { namespace: selectedNode.data.namespace!, objectId: selectedNode.data.objectId! }) })}>打开来源对象</button>}
                 {selectedNode.data.logicalSessionId && <button disabled={previewBusy || !status?.capabilities.sessions} onClick={() => expanded ? setExpanded(false) : void loadPreview()}>{expanded ? '收起局部问答' : '展开局部问答'}</button>}
                 <button disabled={!editable} onClick={() => { editGraph((old) => removePresentation(old, [selectedNode.id])); setSelectedNodeId(null); setNotice('只移除了画布卡片；会话、对象和引用关系仍保留。') }}>移除卡片呈现</button>
               </div>
               {!selectedNode.data.logicalSessionId && !selectedNode.data.objectId && <p className="mg-warning">此卡片缺少来源身份，无法展开或跳转。</p>}
               {expanded && <div className="mg-preview">
-                <p className="mg-hint">按需读取已完成的局部问答。选中回复中的文字可制作材料卡或加入目标会话引用；不会自动发送。</p>
+                <p className="mg-hint">{selectedNode.data.sourceVersionId ? '正在读取材料保存时的固定来源版本；来源新增消息不会改变此材料的范围。' : '按需读取已完成的局部问答；继续翻页保持本次来源版本。'}选中回复中的文字可制作材料卡或加入目标会话引用；不会自动发送。</p>
                 {previewBusy && <p>正在读取…</p>}{previewError && <p role="alert" className="mg-error">{previewError}</p>}
                 {preview?.items.map((item) => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '提问' : '回复'}{!item.complete ? ' · 分页片段' : ''}</small><div className="mg-source-text" onMouseUp={(event) => { if (item.role === 'assistant') captureSelection(event.currentTarget) }}>{item.text}</div></article>)}
                 {selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references || busy} onClick={() => { setError(''); setPicker({ purpose: 'reference', capture: selection.capture, sourceNodeId: selectedNode.id, operationId: crypto.randomUUID() }) }}>引用到会话</button><button disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', { capture: selection.capture }) })}>建立会话贴纸</button></div>}

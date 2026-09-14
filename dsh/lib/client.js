@@ -96,6 +96,8 @@ window.__ModuleLoader__.load({
           return { ...result, prepared: true }
         }
         if (operation === 'open-session') {
+          if (typeof input.nativeSessionId !== 'string' || !input.nativeSessionId.trim() || input.nativeSessionId.length > 256 || input.logicalSessionId !== undefined)
+            throw new Error('打开会话需要已解析的原生会话身份，请重新选择目标')
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
           await ctx.sessions.refresh()
           await ctx.sessions.open(target.nativeSessionId)

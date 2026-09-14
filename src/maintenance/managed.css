@@ -105,7 +105,9 @@
 .mg-network-filters { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:14px 0; }
 .mg-network-filters input[type=text], .mg-network-filters input:not([type]) { flex:1;min-width:180px; }
 .mg-network-list { max-height:28vh;overflow:auto;margin:12px 0; }
-.mg-network-list article { display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid var(--mg-line); }
+.mg-network-list article { display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px;border-bottom:1px solid var(--mg-line); }
 .mg-network-list article>button:first-of-type { flex:1;text-align:left; }
+.mg-network-scope, .mg-network-reference-details { display:flex;flex-wrap:wrap;align-items:center;gap:8px; }
+.mg-network-reference-details { width:100%;font-size:12px;color:var(--mg-muted); }
 .mg-impact-row { display:flex;gap:10px;align-items:center;padding:8px; }
 .mg-impact-row small { margin-left:auto;color:var(--mg-muted); }
