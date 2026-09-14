@@ -1,363 +1,320 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Background, Controls, Handle, MarkerType, Position, ReactFlow, applyEdgeChanges, applyNodeChanges } from '@xyflow/react'
-import type { Connection, Edge, EdgeChange, Node, NodeChange, NodeProps, Viewport } from '@xyflow/react'
+import type { ReactNode } from 'react'
+import { Background, Controls, Handle, MarkerType, Position, ReactFlow, applyNodeChanges } from '@xyflow/react'
+import type { Connection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport } from '@xyflow/react'
 import { captureFromPreview, managedApi, parentRequest } from './client'
-import type { Capture, DirectoryItem, ExtensionObject, Preview, SessionIdentity, Status } from './client'
-import { acceptCanvasBody, addSessionNode, arrangeBySources, connectKnowledge, createActionGuard, EDGE_LABELS, EMPTY_GRAPH, importRelations, nextPosition, nodePrimaryAction, NODE_LABELS, relationPresentation, removePresentation } from './model'
-import type { GraphNodeData, ManagedGraph, UpstreamRelation } from './model'
+import type { Capture, DirectoryItem, ExtensionObject, GraphDocument, Preview, SessionIdentity, Status } from './client'
+import { acceptCanvasBody, addPlaceholder, addSessionNode, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nextPosition, NODE_LABELS, relationPresentation } from './model'
+import type { GraphNode, GraphNodeData, ManagedGraph, UpstreamRelation } from './model'
+import { DisclosurePanel } from './DisclosurePanel'
 import '@xyflow/react/dist/style.css'
 import './managed.css'
-import { KnowledgeNetwork } from './KnowledgeNetwork'
 
 type CanvasNode = Node<GraphNodeData, 'managed'>
-type Picker = { purpose: 'add' | 'reference'; capture?: Capture; sourceNodeId?: string; operationId: string }
-type Selection = { text: string; capture: Capture; preview: Preview }
+type Picker = { purpose: 'add' | 'reference' | 'create'; nodeId?: string; capture?: Capture; operationId: string; position?: { x: number; y: number } }
+type Menu = { x: number; y: number; nodeId?: string; edgeId?: string; position?: { x: number; y: number } }
+type ConnectionDraft = { source: string; target: string; operationId: string; preview: Preview }
+type Bounds = { sourceVersionId: string; sourceAnchorId: string }
+type Cleanup = { nativeSessionId: string; referenceId: string }
 const OBJECT_TYPES = [{ namespace: 'stickers', label: '会话贴纸与已迁移注释', kind: 'sticker' as const }, { namespace: 'annotation', label: '旧注释引用', kind: 'sticker' as const }, { namespace: 'obsidian-links', label: '笔记引用', kind: 'note' as const }]
-const EDGE_COLORS = { branch: '#d99143', upstream: '#8b7de6', knowledge: '#54929b' }
 const errorText = (error: unknown) => error instanceof Error ? error.message : '操作未完成，请重试。'
 
 function ManagedNode({ data, selected }: NodeProps<CanvasNode>) {
-  return <div className={`mg-node mg-node-${data.kind}${selected ? ' mg-selected' : ''}`}>
-    <Handle type="target" position={Position.Top} />
-    <span className="mg-node-kind">{NODE_LABELS[data.kind]}</span>
-    <button className="mg-node-title nodrag" data-open-primary="true" disabled={!nodePrimaryAction(data)}>{data.label || '未命名'}</button>
-    {data.excerpt && <p>{data.excerpt}</p>}
-    <span className="mg-node-hint">{nodePrimaryAction(data)?.operation === 'open-session' ? '点击标题进入完整会话 · 点击卡片查看详情' : '点击标题打开来源对象 · 点击卡片查看详情'}</span>
-    <Handle type="source" position={Position.Bottom} />
-  </div>
+  return <div className={`mg-node mg-node-${data.kind}${selected ? ' mg-selected' : ''}`}><Handle type="target" position={Position.Top} /><span className="mg-node-kind">{NODE_LABELS[data.kind]}</span><strong className="mg-node-title">{data.label || '未命名'}</strong><span className="mg-node-hint">{data.kind === 'placeholder' ? '开始会话时选择工作区' : data.logicalSessionId ? '真实会话 · 按需读取来源' : '已保存的来源对象'}</span><button className="mg-node-more nodrag" data-more="true" aria-label={`${data.label}的更多操作`}>⋯</button><Handle type="source" position={Position.Bottom} /></div>
 }
 const nodeTypes = { managed: ManagedNode }
 
-function SessionPicker({ purpose, canCreate, actionBusy, actionError, onClose, onSelect, onCreate }: { purpose: string; canCreate: boolean; actionBusy: boolean; actionError: string; onClose: () => void; onSelect: (session: DirectoryItem) => void; onCreate: () => void }) {
-  const [workspace, setWorkspace] = useState<DirectoryItem | null>(null)
-  const [items, setItems] = useState<DirectoryItem[]>([])
-  const [cursor, setCursor] = useState<string | undefined>()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const generation = useRef(0)
-  const busyRef = useRef(false)
-  const load = useCallback(async (workspaceId?: string, after?: string) => {
-    if (busyRef.current) return
-    busyRef.current = true; setBusy(true); setError('')
-    const ticket = ++generation.current
+function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const element = useRef<HTMLElement>(null)
+  useEffect(() => { const previous = document.activeElement as HTMLElement | null; element.current?.focus(); return () => { if (previous?.isConnected) previous.focus() } }, [])
+  return <div className="mg-dialog-backdrop" onClick={onClose}><section ref={element} tabIndex={-1} className="mg-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={event => event.stopPropagation()} onKeyDown={event => {
+    if (event.key === 'Escape') { event.stopPropagation(); onClose() }
+    if (event.key !== 'Tab') return
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]'))
+    if (!controls.length) { event.preventDefault(); return }
+    const first = controls[0], last = controls[controls.length - 1]
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === element.current)) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && (document.activeElement === last || document.activeElement === element.current)) { event.preventDefault(); first.focus() }
+  }}><header><h2>{title}</h2><button onClick={onClose} aria-label="关闭">×</button></header><div className="mg-dialog-content">{children}</div></section></div>
+}
+
+function SessionPicker({ picker, busy, error, onClose, onSelect, onCreate }: { picker: Picker; busy: boolean; error: string; onClose: () => void; onSelect: (item: DirectoryItem) => void; onCreate: (workspaceId: string) => void }) {
+  const [workspace, setWorkspace] = useState<DirectoryItem | null>(null), [items, setItems] = useState<DirectoryItem[]>([]), [cursor, setCursor] = useState<string | undefined>()
+  const [loading, setLoading] = useState(false), [loadError, setLoadError] = useState('')
+  const ticket = useRef(0), pending = useRef(false)
+  const load = useCallback(async (after?: string) => {
+    if (pending.current) return
+    pending.current = true; setLoading(true); setLoadError(''); const current = ++ticket.current
     try {
-      const page = await managedApi.directory(workspaceId, after)
-      if (ticket !== generation.current) return
-      setItems((old) => after ? [...old, ...page.items.filter((item) => !old.some((entry) => entry.id === item.id))] : page.items)
-      setCursor(page.nextCursor ?? undefined)
-    } catch (cause) { if (ticket === generation.current) setError(errorText(cause)) }
-    finally { if (ticket === generation.current) { busyRef.current = false; setBusy(false) } }
-  }, [])
-  useEffect(() => {
-    const counter = generation
-    const loading = busyRef
-    void load(workspace?.id)
-    return () => { counter.current++; loading.current = false }
-  }, [workspace, load])
-  return <div className="mg-dialog-backdrop" onClick={onClose}>
-    <section className="mg-dialog" role="dialog" aria-modal="true" aria-label={purpose} onClick={(event) => event.stopPropagation()}>
-      <header><div><h2>{purpose}</h2><p>{workspace ? workspace.title : '先选择工作区，再选择会话'}</p></div><button onClick={onClose} aria-label="关闭">×</button></header>
-      {workspace && <button className="mg-back" disabled={actionBusy} onClick={() => setWorkspace(null)}>← 返回工作区</button>}
-      <div className="mg-picker-list" onScroll={(event) => { const element = event.currentTarget; if (cursor && element.scrollHeight - element.scrollTop - element.clientHeight < 80) void load(workspace?.id, cursor) }}>
-        {items.map((item) => <button disabled={actionBusy} key={item.id} className="mg-picker-item" onClick={() => workspace ? onSelect(item) : setWorkspace(item)}><span>{item.title || '未命名会话'}</span><span>{workspace ? '选择' : '›'}</span></button>)}
-        {!busy && !error && items.length === 0 && <p className="mg-empty">{workspace ? '这个工作区暂时没有可用会话。' : '当前实例没有可用工作区。'}</p>}
-        {error && <p role="alert" className="mg-error">{error}</p>}
-        {actionError && <p role="alert" className="mg-error">{actionError}</p>}
-        {actionBusy && <p className="mg-empty">正在准备目标会话…</p>}
-        {busy && <p className="mg-empty">正在加载…</p>}
-        {cursor && <button disabled={busy} onClick={() => void load(workspace?.id, cursor)}>加载更多</button>}
-        {error && <button disabled={busy} onClick={() => void load(workspace?.id, cursor)}>重试</button>}
-      </div>
-      {canCreate && <footer><button onClick={onCreate}>{purpose === '引用到会话' ? '新建会话并以此处为分支' : '新建独立会话'}</button></footer>}
-    </section>
-  </div>
+      const page = picker.purpose === 'create' ? await managedApi.createWorkspaces(after) : await managedApi.directory(workspace?.id, after)
+      if (current !== ticket.current) return
+      setItems(old => after ? [...old, ...page.items.filter(item => !old.some(row => row.id === item.id))] : page.items); setCursor(page.nextCursor ?? undefined)
+    } catch (cause) { if (current === ticket.current) setLoadError(errorText(cause)) }
+    finally { if (current === ticket.current) { pending.current = false; setLoading(false) } }
+  }, [workspace, picker.purpose])
+  useEffect(() => { const counter = ticket, active = pending; void load(); return () => { counter.current++; active.current = false } }, [load])
+  const creating = picker.purpose === 'create'
+  return <Dialog title={creating ? '选择新会话的工作区' : picker.purpose === 'reference' ? '引用到会话' : '添加已有会话'} onClose={onClose}><p>{creating ? '选择工作区后确认创建；取消不会创建会话。' : workspace ? workspace.title : '先选择工作区，再选择会话。'}</p>{workspace && !creating && <button disabled={busy} onClick={() => setWorkspace(null)}>← 返回工作区</button>}<div className="mg-picker-list" onScroll={event => { const el = event.currentTarget; if (cursor && el.scrollHeight - el.scrollTop - el.clientHeight < 80) void load(cursor) }}>{items.map(item => <button key={item.id} className={`mg-picker-item${creating && workspace?.id === item.id ? ' active' : ''}`} disabled={busy} onClick={() => creating || !workspace ? setWorkspace(item) : onSelect(item)}><span>{item.title || '未命名'}</span><span>{creating ? workspace?.id === item.id ? '已选择' : '选择' : workspace ? '添加' : '›'}</span></button>)}{!loading && !items.length && <p>此处暂时没有可用项目。</p>}{loading && <p>正在加载…</p>}{cursor && <button disabled={loading || busy} onClick={() => void load(cursor)}>加载更多</button>}{loadError && <p className="mg-error" role="alert">{loadError}<button onClick={() => void load(cursor)}>重试</button></p>}</div>{error && <p className="mg-error" role="alert">{error}</p>}{creating && <footer><button className="mg-primary" disabled={!workspace || busy} onClick={() => onCreate(workspace!.id)}>{busy ? '正在创建并绑定…' : '在所选工作区创建并绑定'}</button></footer>}</Dialog>
 }
 
 export default function ManagedGraphApp() {
-  const [network, setNetwork] = useState(false)
-  const [status, setStatus] = useState<Status | null>(null)
-  const [canvases, setCanvases] = useState<ExtensionObject[]>([])
-  const [canvasCursor, setCanvasCursor] = useState<string | undefined>()
-  const [canvas, setCanvas] = useState<ExtensionObject | null>(null)
-  const [graph, setGraph] = useState<ManagedGraph>(EMPTY_GRAPH)
-  const [title, setTitle] = useState('未命名画布')
-  const [dirty, setDirty] = useState(false)
-  const [conflict, setConflict] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [showDeleted, setShowDeleted] = useState(false)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-  const [picker, setPicker] = useState<Picker | null>(null)
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [previewBusy, setPreviewBusy] = useState(false)
-  const [previewError, setPreviewError] = useState('')
-  const [selection, setSelection] = useState<Selection | null>(null)
-  const [relations, setRelations] = useState<UpstreamRelation[]>([])
-  const [confirmedDrafts, setConfirmedDrafts] = useState<Set<string>>(() => new Set())
-  const [confirmedRevoked, setConfirmedRevoked] = useState<Set<string>>(() => new Set())
-  const [relationCursor, setRelationCursor] = useState<string | undefined>()
-  const [objectType, setObjectType] = useState(OBJECT_TYPES[0])
-  const [objects, setObjects] = useState<ExtensionObject[]>([])
-  const [objectCursor, setObjectCursor] = useState<string | undefined>()
-  const [objectError, setObjectError] = useState('')
-  const [showObjects, setShowObjects] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const editVersion = useRef(0)
-  const previewTicket = useRef(0)
-  const actionGuard = useRef(createActionGuard())
-  const objectTicket = useRef(0)
-  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId)
-  const selectedEdge = graph.edges.find((edge) => edge.id === selectedEdgeId)
-  const activeRelation = selectedEdge?.data.relationId ? relations.find((relation) => relation.referenceId === selectedEdge.data.relationId) : undefined
-  const selectedRelationPresentation = selectedEdge ? relationPresentation(selectedEdge, status?.capabilities.references ? relations : [], status?.capabilities.references ? confirmedDrafts : new Set(), confirmedRevoked) : undefined
-  const editable = !!canvas && !canvas.deleted && !busy && status?.capabilities.storage === true
-
-  const changeGraph = useCallback((next: ManagedGraph | ((old: ManagedGraph) => ManagedGraph)) => {
-    setGraph((old) => typeof next === 'function' ? next(old) : next); editVersion.current++; setDirty(true)
+  const [status, setStatus] = useState<Status | null>(null), [document, setDocument] = useState<GraphDocument | null>(null), [graph, setGraph] = useState<ManagedGraph>(EMPTY_GRAPH), [title, setTitle] = useState('未绑定主干草稿')
+  const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
+  const [shown, setShown] = useState(false)
+  const creations = useRef(new Map<string, { workspaceId: string; identity?: SessionIdentity }>())
+  const [currentSession, setCurrentSession] = useState<{ id: string; title?: string } | null>(null)
+  const [library, setLibrary] = useState(false), [canvases, setCanvases] = useState<ExtensionObject[]>([]), [canvasCursor, setCanvasCursor] = useState<string | undefined>()
+  const [menu, setMenu] = useState<Menu | null>(null), [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]), [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([])
+  const [picker, setPicker] = useState<Picker | null>(null), [connectSource, setConnectSource] = useState<string | null>(null), [connection, setConnection] = useState<ConnectionDraft | null>(null)
+  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null), [preview, setPreview] = useState<Preview | null>(null), [previewBusy, setPreviewBusy] = useState(false), [previewError, setPreviewError] = useState(''), [selection, setSelection] = useState<{ text: string; capture: Capture } | null>(null)
+  const [relations, setRelations] = useState<UpstreamRelation[]>([]), [relationCursor, setRelationCursor] = useState<string | undefined>(), [confirmedDrafts, setConfirmedDrafts] = useState<Set<string>>(() => new Set()), [logEdgeId, setLogEdgeId] = useState<string | null>(null)
+  const [showObjects, setShowObjects] = useState(false), [objectType, setObjectType] = useState(OBJECT_TYPES[0]), [objects, setObjects] = useState<ExtensionObject[]>([]), [objectCursor, setObjectCursor] = useState<string | undefined>()
+  const [sourceChoices, setSourceChoices] = useState<{ nodeId: string; bounds: Bounds[] } | null>(null)
+  const repairPage = useRef<{ owner: string; after?: string } | null>(null)
+  const [renameId, setRenameId] = useState<string | null>(null), [rename, setRename] = useState(''), [cleanup, setCleanup] = useState<Cleanup[]>([])
+  const guard = useRef(createActionGuard()), flow = useRef<ReactFlowInstance<CanvasNode, Edge> | null>(null), previewTicket = useRef(0), presentedNative = useRef<string | null>(null)
+  const docRef = useRef(document), graphRef = useRef(graph), dirtyRef = useRef(dirty), titleRef = useRef(title)
+  docRef.current = document; graphRef.current = graph; dirtyRef.current = dirty; titleRef.current = title
+  const editable = !!document && !busy && status?.capabilities.mainGraph === true
+  const accept = useCallback((value: GraphDocument) => {
+    const body = acceptCanvasBody(value.graph)
+    setDocument(value); setGraph(body); setTitle(value.title); setDirty(false); docRef.current = value; graphRef.current = body; dirtyRef.current = false; titleRef.current = value.title; setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null)
   }, [])
-  const editGraph = useCallback((next: ManagedGraph | ((old: ManagedGraph) => ManagedGraph)) => {
-    actionGuard.current.edit(() => changeGraph(next))
-  }, [changeGraph])
   const run = useCallback(async (action: () => Promise<void>) => {
-    if (!actionGuard.current.begin()) return
+    if (!guard.current.begin()) return
     setBusy(true); setError(''); setNotice('')
-    try { await action() } catch (cause) { setError(errorText(cause)) } finally { actionGuard.current.end(); setBusy(false) }
+    try { await action() } catch (cause) { setError(errorText(cause)) } finally { guard.current.end(); setBusy(false) }
   }, [])
-  const listCanvases = useCallback(async (after?: string) => {
-    const page = await managedApi.canvases(after)
-    setCanvases((old) => after ? [...old, ...page.items.filter((item) => !old.some((entry) => entry.objectId === item.objectId))] : page.items)
-    setCanvasCursor(page.nextCursor ?? undefined)
-  }, [])
-  const loadCanvas = useCallback(async (id: string) => {
-    const detail = await managedApi.canvas(id)
-    const body = acceptCanvasBody(detail.object.content?.body)
-    setCanvas(detail.object); setTitle(detail.object.title); setGraph(body); setDirty(false); setConflict(false); editVersion.current++
-    setSelectedNodeId(null); setSelectedEdgeId(null); setPreview(null); setSelection(null); setExpanded(false)
-  }, [])
-  const refreshStatus = useCallback(() => run(async () => {
-    const result = await managedApi.status()
-    if (result.protocolVersion !== 1 || result.mode !== 'maintenance') throw new Error('图谱接口版本不兼容。')
-    setStatus(result)
-    if (result.capabilities.storage) await listCanvases()
-  }), [listCanvases, run])
-  useEffect(() => { void refreshStatus() }, [refreshStatus])
+  const change = (next: ManagedGraph) => { setGraph(next); graphRef.current = next; dirtyRef.current = true; setDirty(true) }
+  const edit = (operation: (old: ManagedGraph) => ManagedGraph) => { if (editable) guard.current.edit(() => change(operation(graphRef.current))) }
+  const persist = async (next = graphRef.current) => {
+    const old = docRef.current, result = await managedApi.save({ ...(old ? { objectId: old.objectId } : {}), expectedRevision: old?.revision ?? 0, title: titleRef.current, graph: next })
+    accept(result); return result
+  }
+  const loadRelations = async (owner: string | null, after?: string) => {
+    if (!owner) { setRelations([]); setRelationCursor(undefined); return }
+    const page = await managedApi.relations(owner, after)
+    setRelations(old => after ? [...old, ...page.items.filter(item => !old.some(row => row.referenceId === item.referenceId))] : page.items); setRelationCursor(page.nextCursor ?? undefined)
+  }
+  const loadDocument = async (value: GraphDocument) => { accept(value); await loadRelations(value.graph.ownerSessionId); if (!value.graph.viewport) window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }) })) }
+  const showOwner = async (logicalSessionId: string) => { if (dirtyRef.current) await persist(); await loadDocument(await managedApi.ensure(logicalSessionId)) }
+  const repairRelations = async () => {
+    if (dirtyRef.current) await persist()
+    const owner = graphRef.current.ownerSessionId
+    if (!owner) return
+    const page = await managedApi.relations(owner, repairPage.current?.owner === owner ? repairPage.current.after : undefined)
+    let next = graphRef.current
+    for (const relation of page.items) {
+      if (relation.state === 'revoked' || relation.targetSessionId !== owner || next.removedRelationIds?.includes(relation.referenceId)) continue
+      next = addSessionNode(next, await managedApi.resolve(relation.sourceSessionId))
+      next = addSessionNode(next, await managedApi.resolve(owner))
+    }
+    await persist(importRelations(next, page.items))
+    setRelations(old => [...old.filter(row => !page.items.some(item => item.referenceId === row.referenceId)), ...page.items])
+    setRelationCursor(page.nextCursor ?? undefined)
+    repairPage.current = { owner, after: page.nextCursor ?? undefined }
+    setNotice(page.nextCursor ? '已导入当前接收会话的本页已有引用；可继续导入下一页。未创建新权限。' : '当前接收会话的已有引用已核对；已撤销引用不会恢复。')
+  }
+  const createDraft = () => run(async () => { if (dirtyRef.current) await persist(); accept(await managedApi.save({ expectedRevision: 0, title: '未绑定主干草稿', graph: { ...EMPTY_GRAPH } })); setRelations([]) })
+  const listCanvases = async (after?: string) => { const page = await managedApi.canvases(after); setCanvases(old => after ? [...old, ...page.items] : page.items); setCanvasCursor(page.nextCursor ?? undefined) }
   useEffect(() => {
-    const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault() }
-    window.addEventListener('beforeunload', beforeUnload)
-    return () => window.removeEventListener('beforeunload', beforeUnload)
-  }, [dirty])
-  useEffect(() => { previewTicket.current++; setPreview(null); setPreviewError(''); setSelection(null); setExpanded(false); setPreviewBusy(false) }, [selectedNodeId])
-
-  const saveCanvas = (deleted = canvas?.deleted ?? false) => run(async () => {
-    if (!canvas) return
-    const version = editVersion.current
-    const result = await managedApi.save({ objectId: canvas.objectId, expectedRevision: canvas.revision, title: title.trim() || '未命名画布', body: graph, deleted })
-    if (result.status === 'conflict') { setConflict(true); setError('这份画布已在其他窗口更新。本地编辑仍保留，请重新载入后再编辑；不会自动覆盖。'); return }
-    setCanvas(result.object)
-    if (version === editVersion.current) setDirty(false)
-    setConflict(false); setNotice(deleted ? '画布已移到回收列表，会话和引用关系仍保留。' : '画布已保存。'); await listCanvases()
-  })
-  const createCanvas = () => run(async () => {
-    const result = await managedApi.save({ objectId: `canvas-${crypto.randomUUID()}`, expectedRevision: 0, title: '未命名画布', body: { ...EMPTY_GRAPH } })
-    if (result.status === 'conflict') throw new Error('创建画布发生冲突，请重试。')
-    setCanvas(result.object); setGraph({ ...EMPTY_GRAPH }); setTitle(result.object.title); setDirty(false); setConflict(false); setSelectedNodeId(null); setSelectedEdgeId(null); await listCanvases()
-  })
-  const openSession = async (logicalSessionId: string) => {
-    const resolved = await managedApi.resolve(logicalSessionId)
-    await parentRequest('open-session', { nativeSessionId: resolved.nativeSessionId })
+    const receive = (event: MessageEvent) => { if (event.origin !== window.location.origin || event.source !== window.parent || event.data?.source !== 'dsh-thoughtdag') return; if (event.data.type === 'td:current-session') setCurrentSession(event.data.session ?? null); if (event.data.type === 'td:view') setShown(event.data.shown === true); if (event.data.type === 'td:view' && event.data.shown && !graphRef.current.viewport) window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }) })) }
+    window.addEventListener('message', receive); window.parent.postMessage({ source: 'dsh-thoughtdag', type: 'td:request-current' }, window.location.origin)
+    void run(async () => { const result = await managedApi.status(); setStatus(result); if (result.protocolVersion !== 2 || !result.capabilities.mainGraph) throw new Error(result.reason || '请更新匹配的会话主干图与维护插件。') })
+    return () => window.removeEventListener('message', receive)
+  }, [run])
+  const showOwnerLatest = useRef(showOwner)
+  showOwnerLatest.current = showOwner
+  useEffect(() => {
+    if (!shown || !status?.capabilities.mainGraph || !currentSession || presentedNative.current === currentSession.id || busy) return
+    presentedNative.current = currentSession.id
+    void run(async () => { const identity = await managedApi.resolveNative(currentSession.id); await showOwnerLatest.current(identity.logicalSessionId) })
+  }, [currentSession, status, shown, busy, run])
+  useEffect(() => { const unload = (event: BeforeUnloadEvent) => { if (dirtyRef.current) event.preventDefault() }; window.addEventListener('beforeunload', unload); return () => window.removeEventListener('beforeunload', unload) }, [])
+  useEffect(() => {
+    if (!menu) return
+    const previous = window.document.activeElement as HTMLElement | null
+    window.document.querySelector<HTMLElement>('[role="menu"] button:not(:disabled)')?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [menu])
+  const cleanReferences = async (items: Cleanup[]) => {
+    let pending = items
+    for (const item of items) {
+      try { await parentRequest('delete-reference', item); pending = pending.filter(row => row !== item); setCleanup(pending) }
+      catch (cause) { setCleanup(pending); throw new Error(`连接已撤销，草稿气泡清理尚未完成：${errorText(cause)}`) }
+    }
   }
-  const openNode = async (data: GraphNodeData) => {
-    const action = nodePrimaryAction(data)
-    if (action?.operation === 'open-object') await parentRequest('open-object', action.input)
-    else if (action?.operation === 'open-session') await openSession(action.logicalSessionId)
+  const remove = (nodeIds: string[], edgeIds: string[]) => run(async () => {
+    if (!docRef.current) return
+    const edges = graphRef.current.edges.filter(edge => edgeIds.includes(edge.id) || nodeIds.includes(edge.source) || nodeIds.includes(edge.target)), affected: Cleanup[] = []
+    for (const edge of edges) {
+      if (!edge.data.relationId) continue
+      const target = graphRef.current.nodes.find(node => node.id === edge.target)?.data.logicalSessionId
+      if (!target) throw new Error('连接目标身份缺失，请先在维护面板恢复关系。')
+      const identity = await managedApi.resolve(target); affected.push({ nativeSessionId: identity.nativeSessionId, referenceId: edge.data.relationId })
+    }
+    const saved = dirtyRef.current ? await persist() : docRef.current
+    await loadDocument(await managedApi.remove({ objectId: saved.objectId, expectedRevision: saved.revision, nodeIds, edgeIds, operationId: crypto.randomUUID() })); setLogEdgeId(null); setPreviewNodeId(null)
+    await cleanReferences(affected); setNotice('所选卡片和连接已移除，受影响引用已撤销；真实会话与既有回答保留。')
+  })
+  const keyboardRemove = useRef(remove), keyboardSelection = useRef({ nodeIds: selectedNodeIds, edgeIds: selectedEdgeIds, editable })
+  keyboardRemove.current = remove; keyboardSelection.current = { nodeIds: selectedNodeIds, edgeIds: selectedEdgeIds, editable }
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.target !== window.document.body || window.document.querySelector('[role="dialog"]')) return
+      const current = keyboardSelection.current
+      if ((event.key === 'Delete' || event.key === 'Backspace') && current.editable && (current.nodeIds.length || current.edgeIds.length)) { event.preventDefault(); void keyboardRemove.current(current.nodeIds, current.edgeIds) }
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [])
+  const start = (node: GraphNode) => {
+    setMenu(null)
+    if (node.data.kind === 'placeholder') { setPicker({ purpose: 'create', nodeId: node.id, operationId: `start:${node.id}` }); return }
+    if (!node.data.logicalSessionId) { if (node.data.namespace && node.data.objectId) void run(async () => { await parentRequest('open-object', { namespace: node.data.namespace!, objectId: node.data.objectId! }) }); return }
+    void run(async () => {
+      let saved = dirtyRef.current ? await persist() : docRef.current!
+      if (!saved.graph.ownerSessionId) { saved = await managedApi.bind(saved.objectId, saved.revision, node.data.logicalSessionId!); await loadDocument(saved); if (saved.reused) setNotice(`已复用会话主干；原草稿 ${saved.draftObjectId} 仍保留。`) }
+      const ownGraph = saved.graph.ownerSessionId === node.data.logicalSessionId ? saved : await managedApi.ensure(node.data.logicalSessionId!)
+      const targetNodeIds = ownGraph.graph.nodes.filter(item => item.data.logicalSessionId === node.data.logicalSessionId).map(item => item.id)
+      const referenceIds = ownGraph.graph.edges.filter(edge => targetNodeIds.includes(edge.target) && edge.data.relationId && !ownGraph.graph.removedRelationIds?.includes(edge.data.relationId)).map(edge => edge.data.relationId!).sort()
+      const identity = await managedApi.resolve(node.data.logicalSessionId!); await parentRequest('open-session', { nativeSessionId: identity.nativeSessionId, referenceIds })
+    })
   }
-  const addIdentity = (identity: SessionIdentity) => { changeGraph((old) => addSessionNode(old, identity)); setSelectedNodeId(`session:${identity.logicalSessionId}`) }
+  const createSession = (workspaceId: string) => run(async () => {
+    if (!picker?.nodeId) return
+    const persistedWorkspace = graphRef.current.nodes.find(node => node.id === picker.nodeId)?.data.creationWorkspaceId
+    const prior = creations.current.get(picker.operationId) ?? (persistedWorkspace ? { workspaceId: persistedWorkspace } : undefined)
+    if (prior && prior.workspaceId !== workspaceId) throw new Error('此空卡片已在先前选择的工作区开始创建，请选择原工作区重试。')
+    const operation = prior ?? { workspaceId }
+    creations.current.set(picker.operationId, operation)
+    if (!persistedWorkspace && graphRef.current.nodes.find(node => node.id === picker.nodeId)?.data.kind === 'placeholder') {
+      const intent = { ...graphRef.current, nodes: graphRef.current.nodes.map(node => node.id === picker.nodeId ? { ...node, data: { ...node.data, creationWorkspaceId: workspaceId } } : node) }
+      change(intent); await persist(intent)
+    }
+    const identity = operation.identity ?? await managedApi.createSession(picker.operationId, workspaceId)
+    operation.identity = identity
+    const bound = bindPlaceholder(graphRef.current, picker.nodeId, identity)
+    change(bound)
+    const saved = await persist(bound)
+    const owner = saved.graph.ownerSessionId ? await managedApi.ensure(identity.logicalSessionId) : await managedApi.bind(saved.objectId, saved.revision, identity.logicalSessionId)
+    if (!saved.graph.ownerSessionId) await loadDocument(owner)
+    setPicker(null); setNotice(owner.reused ? '已绑定并复用已有主干，原草稿仍保留。' : '真实会话已创建并绑定。待绑定连接仍需确认固定来源。')
+    await parentRequest('open-session', { nativeSessionId: identity.nativeSessionId, referenceIds: [] })
+  })
+  const attachReference = async (identity: SessionIdentity, capture: Capture, operationId: string) => {
+    if (dirtyRef.current) await persist()
+    const result = await parentRequest<{ referenceId: string }>('add-reference', { targetSessionId: identity.nativeSessionId, capture, operationId })
+    setConfirmedDrafts(old => new Set([...old, result.referenceId])); await loadDocument(await managedApi.ensure(identity.logicalSessionId)); setNotice('引用已加入接收会话草稿；主干归属于接收会话。请在真实会话检查后发送。')
+  }
   const chooseSession = (item: DirectoryItem) => run(async () => {
-    if (!item.logicalSessionId) throw new Error('会话缺少可解析的稳定身份，请刷新目录。')
+    if (!item.logicalSessionId || !picker) throw new Error('会话缺少稳定身份，请刷新目录。')
     const identity = await managedApi.resolve(item.logicalSessionId)
-    if (picker?.purpose === 'reference' && picker.capture) {
-      const result = await parentRequest<{ referenceId: string }>('add-reference', { targetSessionId: identity.nativeSessionId, capture: picker.capture, operationId: `${picker.operationId}:${identity.logicalSessionId}` })
-      setConfirmedDrafts((old) => new Set([...old, result.referenceId]))
-      changeGraph((old) => {
-        const next = addSessionNode(old, identity)
-        return picker.sourceNodeId && !next.edges.some((edge) => edge.data.relationId === result.referenceId) ? { ...next, edges: [...next.edges, { id: `relation:${result.referenceId}`, source: picker.sourceNodeId, target: `session:${identity.logicalSessionId}`, data: { kind: 'upstream', namespace: 'annotation-upstream', relationId: result.referenceId } }] } : next
-      })
-      setNotice('引用已加入目标会话草稿，尚未发送。')
-    } else addIdentity(identity)
+    if (picker.purpose === 'reference' && picker.capture) await attachReference(identity, picker.capture, `${picker.operationId}:${identity.logicalSessionId}`)
+    else { const next = addSessionNode(graphRef.current, identity); change(picker.position ? { ...next, nodes: next.nodes.map(node => node.id === `session:${identity.logicalSessionId}` ? { ...node, position: picker.position! } : node) } : next); setNotice('已有会话卡片已添加；未创建引用。') }
     setPicker(null)
   })
-  const createSession = () => run(async () => {
-    if (!picker) return
-    const identity = await managedApi.createSession(picker.operationId)
-    addIdentity(identity)
-    if (picker?.purpose === 'reference' && picker.capture) {
-      const result = await parentRequest<{ referenceId: string }>('add-reference', { targetSessionId: identity.nativeSessionId, capture: picker.capture, operationId: `${picker.operationId}:${identity.logicalSessionId}` })
-      setConfirmedDrafts((old) => new Set([...old, result.referenceId]))
-      if (picker.sourceNodeId) changeGraph((old) => old.edges.some((edge) => edge.data.relationId === result.referenceId) ? old : ({ ...old, edges: [...old.edges, { id: `relation:${result.referenceId}`, source: picker.sourceNodeId!, target: `session:${identity.logicalSessionId}`, data: { kind: 'branch', namespace: 'annotation-upstream', relationId: result.referenceId } }] }))
-      setNotice('新会话已建立，分支引用已加入草稿，尚未发送。')
-    } else setNotice('真实会话已建立，可以从卡片打开。')
-    setPicker(null)
+  const beginConnect = (sourceId: string, targetId: string) => run(async () => {
+    setConnectSource(null); setMenu(null)
+    const source = graphRef.current.nodes.find(node => node.id === sourceId), target = graphRef.current.nodes.find(node => node.id === targetId)
+    if (!source || !target || source.id === target.id) return
+    if (!source.data.logicalSessionId || !target.data.logicalSessionId) { change(connectPending(graphRef.current, sourceId, targetId)); setNotice('已添加待绑定连接，请保存主干；绑定真实会话并确认来源后才可读取。'); return }
+    if (source.data.logicalSessionId === target.data.logicalSessionId) throw new Error('同一个会话不能引用自身。')
+    const result = await managedApi.preview(source.data.logicalSessionId, undefined, source.data.sourceVersionId, source.data.sourceAnchorId)
+    if (!result.capture) throw new Error('来源尚无可确认的已完成回复，请完成来源回复后重试。')
+    setConnection({ source: sourceId, target: targetId, operationId: crypto.randomUUID(), preview: result })
   })
-  const loadPreview = async (cursor?: string) => {
-    if (!selectedNode?.data.logicalSessionId) return
-    const ticket = ++previewTicket.current
-    setExpanded(true); setPreviewBusy(true); setPreviewError(''); setSelection(null)
-    try {
-      const result = await managedApi.preview(selectedNode.data.logicalSessionId, cursor, selectedNode.data.sourceVersionId, selectedNode.data.sourceAnchorId)
-      if (ticket === previewTicket.current) setPreview(result)
-    } catch (cause) { if (ticket === previewTicket.current) setPreviewError(errorText(cause)) }
+  const confirmConnection = () => run(async () => {
+    if (!connection?.preview.capture) return
+    const target = graphRef.current.nodes.find(node => node.id === connection.target)
+    if (!target?.data.logicalSessionId) throw new Error('目标已变化，请重新选择。')
+    const oldDoc = docRef.current!, pending = graphRef.current.edges.find(edge => edge.source === connection.source && edge.target === connection.target && edge.data.kind === 'pending')
+    await attachReference(await managedApi.resolve(target.data.logicalSessionId), captureFromPreview(connection.preview, connection.preview.capture.selectedText), connection.operationId)
+    if (pending) { const old = await managedApi.canvas(oldDoc.objectId); const result = await managedApi.remove({ objectId: old.objectId, expectedRevision: old.revision, edgeIds: [pending.id], operationId: `pending:${connection.operationId}` }); if (docRef.current?.objectId === old.objectId) await loadDocument(result) }
+    setConnection(null)
+  })
+  const loadPreview = async (nodeId: string, cursor?: string, explicit?: Bounds) => {
+    const node = graphRef.current.nodes.find(item => item.id === nodeId)
+    if (!node?.data.logicalSessionId) return
+    let bounds = explicit ?? (node.data.sourceVersionId && node.data.sourceAnchorId ? { sourceVersionId: node.data.sourceVersionId, sourceAnchorId: node.data.sourceAnchorId } : undefined)
+    if (!cursor && !bounds) {
+      const candidates = graphRef.current.edges.filter(edge => edge.source === nodeId && edge.data.relationId).map(edge => { const relation = relations.find(item => item.referenceId === edge.data.relationId); return { sourceVersionId: relation?.sourceVersionId ?? edge.data.sourceVersionId, sourceAnchorId: relation?.sourceAnchorId ?? edge.data.sourceAnchorId } }).filter((value): value is Bounds => !!value.sourceVersionId && !!value.sourceAnchorId)
+      const unique = candidates.filter((value, index) => candidates.findIndex(other => other.sourceVersionId === value.sourceVersionId && other.sourceAnchorId === value.sourceAnchorId) === index)
+      if (unique.length > 1) { setSourceChoices({ nodeId, bounds: unique }); return }
+      bounds = unique[0]
+    }
+    setSourceChoices(null)
+    const ticket = ++previewTicket.current; setPreviewNodeId(nodeId); setPreviewBusy(true); setPreviewError(''); setSelection(null)
+    if (!cursor) setPreview(null)
+    try { const value = await managedApi.preview(node.data.logicalSessionId, cursor, bounds?.sourceVersionId, bounds?.sourceAnchorId); if (ticket === previewTicket.current) setPreview(value) }
+    catch (cause) { if (ticket === previewTicket.current) setPreviewError(errorText(cause)) }
     finally { if (ticket === previewTicket.current) setPreviewBusy(false) }
   }
   const captureSelection = (element: HTMLElement) => {
-    const chosen = window.getSelection()
-    const text = chosen?.toString().trim() ?? ''
+    const chosen = window.getSelection(), text = chosen?.toString().trim() ?? ''
     if (!preview?.capture || !chosen?.anchorNode || !chosen.focusNode || !element.contains(chosen.anchorNode) || !element.contains(chosen.focusNode) || !text) { setSelection(null); return }
-    if (text.length > 4000) { setPreviewError('一次最多选取 4000 个字符作为重点材料。'); setSelection(null); return }
-    setPreviewError(''); setSelection({ text, capture: captureFromPreview(preview, text), preview })
+    if (text.length > 4000) { setPreviewError('一次最多选取 4000 字作为重点材料。'); return }
+    setSelection({ text, capture: captureFromPreview(preview, text) })
   }
   const addMaterial = () => {
-    if (!selection || !selectedNode) return
-    const id = `material:${crypto.randomUUID()}`
-    editGraph((old) => connectKnowledge({ ...old, nodes: [...old.nodes, { id, position: nextPosition(old), data: { kind: 'material', label: `${selectedNode.data.label} · 选段`, logicalSessionId: selection.preview.logicalSessionId, excerpt: selection.text, sourceVersionId: selection.preview.sourceVersionId, sourceAnchorId: selection.capture.anchorId } }] }, selectedNode.id, id))
-    setNotice('选段材料已加入画布；只保存你选中的文字和来源定位。')
+    if (!selection || !preview) return
+    edit(old => ({ ...old, nodes: [...old.nodes, { id: `material:${crypto.randomUUID()}`, position: nextPosition(old), data: { kind: 'material', label: '来源选段', logicalSessionId: preview.logicalSessionId, excerpt: selection.text, sourceVersionId: preview.sourceVersionId, sourceAnchorId: selection.capture.anchorId } }] })); setNotice('选段材料已保存为卡片，可从查看来源继续读取固定版本。')
   }
-  const loadRelations = (after?: string) => run(async () => {
-    if (!after) { setRelations([]); setRelationCursor(undefined) }
-    const page = await managedApi.relations(after)
-    setRelations((old) => after ? [...old, ...page.items.filter((item) => !old.some((entry) => entry.referenceId === item.referenceId))] : page.items)
-    setRelationCursor(page.nextCursor ?? undefined)
-    changeGraph((old) => importRelations(old, page.items))
-    setNotice('已载入权威引用关系；只有画布中已添加的两端会话显示连线。')
-  })
-  const unlinkReference = () => run(async () => {
-    if (!selectedEdge?.data.relationId) return
-    const target = graph.nodes.find((node) => node.id === selectedEdge.target)
-    if (!target?.data.logicalSessionId) throw new Error('目标会话缺失，无法安全解除引用。')
-    const identity = await managedApi.resolve(target.data.logicalSessionId)
-    await parentRequest('delete-reference', { nativeSessionId: identity.nativeSessionId, referenceId: selectedEdge.data.relationId })
-    setConfirmedRevoked((old) => new Set([...old, selectedEdge.data.relationId!]))
-    setRelations((old) => old.map((relation) => relation.referenceId === selectedEdge.data.relationId ? { ...relation, state: 'revoked' } : relation))
-    setNotice('引用关系已解除，后续读取将遵守解除状态。画布呈现仍保留，可另行移除。')
-  })
-  const loadObjects = async (type = objectType, after?: string) => {
-    const ticket = ++objectTicket.current
-    setObjectError('')
-    if (!after) { setObjects([]); setObjectCursor(undefined) }
-    try {
-      const page = await managedApi.objects(type.namespace, after)
-      if (ticket !== objectTicket.current) return
-      setObjects((old) => after ? [...old, ...page.items.filter((item) => !old.some((entry) => entry.objectId === item.objectId))] : page.items)
-      setObjectCursor(page.nextCursor ?? undefined)
-    } catch (cause) { if (ticket === objectTicket.current) { setObjectError(errorText(cause)); if (!after) setObjects([]) } }
-  }
+  const loadObjects = async (type = objectType, after?: string) => { const page = await managedApi.objects(type.namespace, after); setObjects(old => after ? [...old, ...page.items] : page.items); setObjectCursor(page.nextCursor ?? undefined) }
   const addObject = (object: ExtensionObject) => run(async () => {
-    const detail = await managedApi.object(objectType.namespace, object.objectId)
-    const logicalSessionId = detail.object.content?.references?.[0]?.logicalSessionId
-    const id = `object:${objectType.namespace}:${object.objectId}`
-    if (graph.nodes.some((node) => node.id === id)) { setSelectedNodeId(id); return }
-    changeGraph((old) => ({ ...old, nodes: [...old.nodes, { id, position: nextPosition(old), data: { kind: objectType.kind, label: object.title, namespace: objectType.namespace, objectId: object.objectId, ...(logicalSessionId ? { logicalSessionId } : {}) } }] }))
+    const detail = await managedApi.object(objectType.namespace, object.objectId), body = detail.object.content?.body as { logicalSessionId?: string } | undefined
+    const logicalSessionId = body?.logicalSessionId ?? detail.object.content?.references?.[0]?.logicalSessionId, id = `${objectType.namespace}:${object.objectId}`
+    if (!graphRef.current.nodes.some(node => node.id === id)) change({ ...graphRef.current, nodes: [...graphRef.current.nodes, { id, position: nextPosition(graphRef.current), data: { kind: objectType.kind, label: object.title, namespace: objectType.namespace, objectId: object.objectId, ...(logicalSessionId ? { logicalSessionId } : {}) } }] })
+    setShowObjects(false)
   })
-
-  const nodes = useMemo<CanvasNode[]>(() => graph.nodes.map((node) => ({ ...node, type: 'managed', selected: node.id === selectedNodeId })), [graph.nodes, selectedNodeId])
-  const edges = useMemo<Edge[]>(() => graph.edges.map((edge) => {
-    const presentation = relationPresentation(edge, status?.capabilities.references ? relations : [], status?.capabilities.references ? confirmedDrafts : new Set(), confirmedRevoked)
-    const color = presentation.muted ? 'var(--mg-muted)' : EDGE_COLORS[edge.data.kind]
-    return { ...edge, label: presentation.label, selected: edge.id === selectedEdgeId, markerEnd: { type: MarkerType.ArrowClosed, color }, style: { stroke: color, opacity: presentation.muted ? 0.6 : 1, strokeWidth: edge.id === selectedEdgeId ? 3 : 1.8, strokeDasharray: presentation.dashed ? '5 4' : undefined } }
-  }), [graph.edges, selectedEdgeId, relations, confirmedDrafts, confirmedRevoked, status?.capabilities.references])
+  const openMenu = (event: { preventDefault(): void; clientX: number; clientY: number }, target: Partial<Menu> = {}) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, ...target }) }
+  const align = () => { try { edit(arrangeBySources); setMenu(null) } catch (cause) { setError(errorText(cause)) } }
+  const nodes = useMemo<CanvasNode[]>(() => graph.nodes.map(node => ({ ...node, type: 'managed', selected: selectedNodeIds.includes(node.id) })), [graph.nodes, selectedNodeIds])
+  const edges = useMemo<Edge[]>(() => graph.edges.map(edge => { const presentation = relationPresentation(edge, relations, confirmedDrafts); return { ...edge, selected: selectedEdgeIds.includes(edge.id), label: presentation.label, markerEnd: { type: MarkerType.ArrowClosed, color: presentation.muted ? '#999baa' : '#7764d8' }, style: { stroke: presentation.muted ? '#999baa' : '#7764d8', strokeDasharray: presentation.dashed ? '5 4' : undefined, strokeWidth: 1.8 } } }), [graph.edges, relations, confirmedDrafts, selectedEdgeIds])
   const nodesChanged = (changes: NodeChange<CanvasNode>[]) => {
-    if (!editable) return
-    const edits = changes.filter((change) => change.type !== 'select' && change.type !== 'dimensions')
-    if (!edits.length) return
-    editGraph((old) => {
-      const updated = applyNodeChanges(edits, old.nodes.map((node) => ({ ...node, type: 'managed' as const })))
-      const ids = new Set(updated.map((node) => node.id))
-      return { ...old, nodes: updated.map(({ id, position, data }) => ({ id, position, data })), edges: old.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)) }
-    })
+    const selections = changes.filter(change => change.type === 'select')
+    if (selections.length) setSelectedNodeIds(old => { const ids = new Set(old); for (const selection of selections) { if (selection.selected) ids.add(selection.id); else ids.delete(selection.id) }; return [...ids] })
+    const edits = changes.filter(change => change.type === 'position')
+    if (edits.length) edit(old => ({ ...old, nodes: applyNodeChanges(edits, old.nodes.map(node => ({ ...node, type: 'managed' as const }))).map(({ id, position, data }) => ({ id, position, data })) }))
   }
-  const edgesChanged = (changes: EdgeChange[]) => {
-    if (!editable) return
-    const removed = applyEdgeChanges(changes.filter((change) => change.type === 'remove'), edges)
-    if (removed.length !== graph.edges.length) editGraph((old) => ({ ...old, edges: old.edges.filter((edge) => removed.some((entry) => entry.id === edge.id)) }))
-  }
-  const onConnect = (connection: Connection) => {
-    if (editable && connection.source && connection.target) { editGraph((old) => connectKnowledge(old, connection.source, connection.target)); setNotice('已添加知识关联。需要上下文引用时，请展开来源回复并选择“引用到会话”。') }
-  }
-  const saveViewport = (_event: unknown, viewport: Viewport) => { if (editable) editGraph((old) => ({ ...old, viewport })) }
-  const alignGraph = () => {
-    try { editGraph(arrangeBySources(graph)); setError('') } catch (cause) { setError(errorText(cause)) }
-  }
-
-  return <div className="mg-app">
-    <aside className="mg-sidebar">
-      <header className="mg-sidebar-title"><h1>会话图谱</h1><button disabled={busy || dirty || !status?.capabilities.storage} onClick={() => void createCanvas()} title={dirty ? '请先保存当前编辑' : '新建画布'}>＋</button></header>
-      <p className="mg-subtitle">会话、材料与引用关系</p>
-      <button className="mg-quiet" disabled={busy} onClick={() => setNetwork(true)}>全局维护网络</button>
-      <button className="mg-quiet" disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', {}) })}>会话贴纸 · 新建 / 管理</button>
-      <div className="mg-canvas-list">
-        {canvases.filter((item) => item.deleted === showDeleted).map((item) => <button disabled={busy || (dirty && canvas?.objectId !== item.objectId)} key={item.objectId} className={`mg-canvas-item${canvas?.objectId === item.objectId ? ' active' : ''}`} onClick={() => { if (canvas?.objectId !== item.objectId) void run(() => loadCanvas(item.objectId)) }}><span>{item.title || '未命名画布'}</span><small>修订 {item.revision}{item.deleted ? ' · 已移除' : ''}</small></button>)}
-        {canvasCursor && <button disabled={busy} onClick={() => void run(() => listCanvases(canvasCursor))}>加载更多画布</button>}
-      </div>
-      <button className="mg-quiet" onClick={() => setShowDeleted(!showDeleted)}>{showDeleted ? '← 返回画布' : '已移除的画布'}</button>
-      <button className="mg-quiet" disabled={busy} onClick={() => void refreshStatus()}>检查扩展连接</button>
-      <p className="mg-sidebar-note">图谱保存布局与稳定引用。实际对话始终在完整会话页进行。</p>
+  const onConnect = (value: Connection) => { if (editable && value.source && value.target) void beginConnect(value.source, value.target) }
+  const saveViewport = (_event: unknown, viewport: Viewport) => { if (editable && _event) edit(old => ({ ...old, viewport })) }
+  const menuNode = graph.nodes.find(node => node.id === menu?.nodeId), menuEdge = graph.edges.find(edge => edge.id === menu?.edgeId), previewNode = graph.nodes.find(node => node.id === previewNodeId), logEdge = graph.edges.find(edge => edge.id === logEdgeId)
+  const activeRelation = relations.find(relation => relation.referenceId === logEdge?.data.relationId), selected = selectedNodeIds.length + selectedEdgeIds.length > 0
+  return <div className="mg-app" tabIndex={-1} onPointerDownCapture={event => { if ((event.target as Element).closest('.react-flow__edge')) event.currentTarget.focus() }} onKeyDownCapture={event => {
+    if (event.key === 'Escape') { if (!busy) { setMenu(null); setPicker(null); setConnection(null); setConnectSource(null); setShowObjects(false); setRenameId(null); setPreviewNodeId(null); setLogEdgeId(null); setSourceChoices(null); previewTicket.current++ } return }
+    if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true],[role=dialog]')) return
+    if ((event.key === 'Delete' || event.key === 'Backspace') && editable && selected) { event.preventDefault(); void remove(selectedNodeIds, selectedEdgeIds) }
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); setMenu({ x: window.innerWidth / 2, y: 150, ...(selectedNodeIds[0] ? { nodeId: selectedNodeIds[0] } : selectedEdgeIds[0] ? { edgeId: selectedEdgeIds[0] } : {}) }) }
+  }}>
+    <aside className="mg-sidebar"><header><h1>会话主干图</h1><p>上下文来源 → 接收会话</p></header>
+      <button disabled={busy || !currentSession || !status?.capabilities.mainGraph} onClick={() => void run(async () => { await showOwner((await managedApi.resolveNative(currentSession!.id)).logicalSessionId) })}>当前会话的主干</button>
+      <button disabled={busy || !status?.capabilities.mainGraph} onClick={() => void createDraft()}>新建未绑定草稿</button>
+      <button className="mg-quiet" disabled={busy} onClick={() => { setLibrary(!library); if (!library) void run(() => listCanvases()) }}>已有主干与待归属草稿</button>
+      {library && <div className="mg-canvas-list">{canvases.filter(item => !item.deleted).map(item => <button key={item.objectId} className="mg-canvas-item" disabled={busy} onClick={() => void run(async () => { if (dirtyRef.current) await persist(); await loadDocument(await managedApi.canvas(item.objectId)) })}>{item.title}<small>修订 {item.revision}</small></button>)}{canvasCursor && <button disabled={busy} onClick={() => void run(() => listCanvases(canvasCursor))}>加载更多</button>}</div>}
+      <p className="mg-sidebar-note">每个接收会话使用自己的主干。图只保存结构、固定来源和读取位置；正文按需读取。</p>
     </aside>
-    <main className="mg-main">
-      <header className="mg-toolbar">
-        <input aria-label="画布名称" value={title} disabled={!editable} maxLength={120} onChange={(event) => { const value = event.target.value; actionGuard.current.edit(() => { setTitle(value); setDirty(true); editVersion.current++ }) }} />
-        <span className="mg-save-state">{canvas?.deleted ? '已移除' : dirty ? '未保存' : canvas ? `已保存 · 修订 ${canvas.revision}` : '请选择画布'}</span>
-        <button className="mg-primary" disabled={busy || !editable || conflict} onClick={() => void saveCanvas(false)}>保存</button>
-        {canvas?.deleted ? <button disabled={busy || !status?.capabilities.storage} onClick={() => void saveCanvas(false)}>恢复画布</button> : <button disabled={busy || !canvas || dirty} onClick={() => void saveCanvas(true)}>移除画布</button>}
-      </header>
-      {error && <div role="alert" className="mg-banner mg-error">{error}</div>}
-      {notice && <div role="status" className="mg-banner">{notice}</div>}
-      {conflict && <div className="mg-banner mg-conflict"><strong>本地编辑仍在当前窗口中。</strong><button disabled={busy} onClick={() => { if (canvas) void run(() => loadCanvas(canvas.objectId)) }}>放弃本地编辑，重新载入</button></div>}
-      {status && (!status.capabilities.storage || !status.capabilities.sessions || !status.capabilities.references) && <div className="mg-banner mg-warning">{status.reason || '部分扩展能力暂不可用。'} {!status.capabilities.storage && '画布存储不可用。'} {!status.capabilities.sessions && '会话目录不可用。'} {!status.capabilities.references && '引用能力未启用；仍可浏览画布，不能新增或解除上下文引用。'}</div>}
-      {canvas ? <>
-        <nav className="mg-actions" aria-label="画布操作">
-          <button disabled={!editable || busy || !status?.capabilities.sessions} onClick={() => { setError(''); setPicker({ purpose: 'add', operationId: crypto.randomUUID() }) }}>＋ 会话</button>
-          <button disabled={!editable || busy} onClick={() => { setShowObjects(!showObjects); if (!showObjects) void loadObjects() }}>关联对象</button>
-          <button disabled={!editable || busy || !status?.capabilities.references} onClick={() => void loadRelations()}>载入已有引用</button>
-          {relationCursor && <button disabled={busy} onClick={() => void loadRelations(relationCursor)}>更多引用</button>}
-          <button disabled={!editable || graph.nodes.length === 0} onClick={alignGraph}>按来源排列</button>
-          <span>拖动节点连接点建立知识关联</span>
-        </nav>
-        <div className="mg-workbench">
-          <div className="mg-flow">
-            <ReactFlow key={canvas.objectId} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={nodesChanged} onEdgesChange={edgesChanged} onConnect={onConnect} onNodeClick={(event, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); if ((event.target as Element).closest('[data-open-primary]')) void run(() => openNode(node.data)) }} onNodeDoubleClick={(_event, node) => { void run(() => openNode(node.data)) }} onEdgeClick={(_event, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null) }} onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null) }} onMoveEnd={saveViewport} defaultViewport={graph.viewport} nodesDraggable={editable} nodesConnectable={editable} deleteKeyCode={editable ? ['Backspace', 'Delete'] : null} fitView={!graph.viewport} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} ariaLabelConfig={{ 'controls.fitView.ariaLabel': '适合画布', 'controls.zoomIn.ariaLabel': '放大画布', 'controls.zoomOut.ariaLabel': '缩小画布' }} minZoom={0.15} maxZoom={2}>
-              <Background gap={22} size={1} /><Controls fitViewOptions={{ maxZoom: 1, padding: 0.2 }} />
-            </ReactFlow>
-            {graph.nodes.length === 0 && <div className="mg-canvas-empty"><strong>从一个真实会话开始</strong><p>添加会话后，展开局部问答、制作材料卡，或载入已经建立的引用关系。</p></div>}
-            <div className="mg-legend">{Object.entries(EDGE_LABELS).map(([kind, label]) => <span key={kind}><i style={{ background: EDGE_COLORS[kind as keyof typeof EDGE_COLORS] }} />{label}</span>)}</div>
-          </div>
-          {(selectedNode || selectedEdge || showObjects) && <aside className="mg-details">
-            {showObjects && <section className="mg-object-browser"><h2>关联已有对象</h2><select aria-label="对象类型" value={objectType.namespace} onChange={(event) => { const value = OBJECT_TYPES.find((type) => type.namespace === event.target.value)!; setObjectType(value); void loadObjects(value) }}>{OBJECT_TYPES.map((type) => <option value={type.namespace} key={type.namespace}>{type.label}</option>)}</select><p>只加载标题和关联身份；正文仍由来源管理。</p>{objectError && <p className="mg-error" role="alert">{objectError}</p>}{objects.filter((object) => !object.deleted).map((object) => <button className="mg-picker-item" disabled={busy || !editable} key={object.objectId} onClick={() => void addObject(object)}>{object.title || '未命名对象'} ＋</button>)}{objectCursor && <button onClick={() => void loadObjects(objectType, objectCursor)}>加载更多</button>}<button className="mg-quiet" onClick={() => setShowObjects(false)}>收起对象列表</button></section>}
-            {selectedNode && <section>
-              <span className="mg-node-kind">{NODE_LABELS[selectedNode.data.kind]}</span><h2>{selectedNode.data.label}</h2>
-              {selectedNode.data.excerpt && <blockquote>{selectedNode.data.excerpt}</blockquote>}
-              <div className="mg-detail-actions">
-                {selectedNode.data.logicalSessionId && <button className="mg-primary" disabled={busy || !status?.capabilities.sessions} onClick={() => void run(() => openSession(selectedNode.data.logicalSessionId!))}>打开完整会话</button>}
-                {selectedNode.data.objectId && selectedNode.data.namespace && <button disabled={busy} onClick={() => void run(async () => { await parentRequest('open-object', { namespace: selectedNode.data.namespace!, objectId: selectedNode.data.objectId! }) })}>打开来源对象</button>}
-                {selectedNode.data.logicalSessionId && <button disabled={previewBusy || !status?.capabilities.sessions} onClick={() => expanded ? setExpanded(false) : void loadPreview()}>{expanded ? '收起局部问答' : '展开局部问答'}</button>}
-                <button disabled={!editable} onClick={() => { editGraph((old) => removePresentation(old, [selectedNode.id])); setSelectedNodeId(null); setNotice('只移除了画布卡片；会话、对象和引用关系仍保留。') }}>移除卡片呈现</button>
-              </div>
-              {!selectedNode.data.logicalSessionId && !selectedNode.data.objectId && <p className="mg-warning">此卡片缺少来源身份，无法展开或跳转。</p>}
-              {expanded && <div className="mg-preview">
-                <p className="mg-hint">{selectedNode.data.sourceVersionId ? '正在读取材料保存时的固定来源版本；来源新增消息不会改变此材料的范围。' : '按需读取已完成的局部问答；继续翻页保持本次来源版本。'}选中回复中的文字可制作材料卡或加入目标会话引用；不会自动发送。</p>
-                {previewBusy && <p>正在读取…</p>}{previewError && <p role="alert" className="mg-error">{previewError}</p>}
-                {preview?.items.map((item) => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '提问' : '回复'}{!item.complete ? ' · 分页片段' : ''}</small><div className="mg-source-text" onMouseUp={(event) => { if (item.role === 'assistant') captureSelection(event.currentTarget) }}>{item.text}</div></article>)}
-                {selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references || busy} onClick={() => { setError(''); setPicker({ purpose: 'reference', capture: selection.capture, sourceNodeId: selectedNode.id, operationId: crypto.randomUUID() }) }}>引用到会话</button><button disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', { capture: selection.capture }) })}>建立会话贴纸</button></div>}
-                {preview?.nextCursor && <button disabled={previewBusy} onClick={() => void loadPreview(preview.nextCursor ?? undefined)}>继续读取这一来源</button>}
-                {!previewBusy && !previewError && preview && preview.items.length === 0 && <p>暂时没有可读取的已完成回复。</p>}
-              </div>}
-            </section>}
-            {selectedEdge && <section><span className="mg-node-kind">{EDGE_LABELS[selectedEdge.data.kind]}</span><h2>连线与引用</h2><p>{selectedEdge.data.kind === 'knowledge' ? '这条线只表达知识关联，不会向模型加入上下文。' : '这条线指向由引用扩展维护的关系。它不代表模型已经读完来源。'}</p>{selectedEdge.data.relationId && <p className="mg-hint">{selectedRelationPresentation?.label}</p>}<div className="mg-detail-actions"><button disabled={!editable} onClick={() => { editGraph((old) => removePresentation(old, [], [selectedEdge.id])); setSelectedEdgeId(null); setNotice('只移除了线条呈现，未解除实际引用。') }}>仅移除线条呈现</button>{selectedEdge.data.relationId && <button className="mg-danger" disabled={busy || !status?.capabilities.references || activeRelation?.state === 'revoked' || selectedRelationPresentation?.state === 'revoked'} onClick={() => void unlinkReference()}>解除上下文引用</button>}</div><p className="mg-hint">解除引用影响后续读取，既有会话历史保持原有语义。</p></section>}
-          </aside>}
-        </div>
-      </> : <div className="mg-welcome"><h2>让会话与材料在画布上相连</h2><p>创建或打开一份画布。会话按需展开，引用通过统一工具读取上游。</p><button className="mg-primary" disabled={busy || !status?.capabilities.storage} onClick={() => void createCanvas()}>新建画布</button>{!status && !busy && <button onClick={() => void refreshStatus()}>重新连接</button>}</div>}
+    <main className="mg-main"><header className="mg-toolbar"><input aria-label="主干名称" value={title} disabled={!editable} onChange={event => { setTitle(event.target.value); titleRef.current = event.target.value; setDirty(true); dirtyRef.current = true }} /><span className="mg-save-state">{dirty ? '未保存' : document ? `已保存 · 修订 ${document.revision}` : '尚未打开主干'}</span><button disabled={!editable} className="mg-primary" onClick={() => void run(async () => { await persist(); setNotice('主干已保存。') })}>保存</button><button disabled={!document || busy} onClick={() => void run(async () => { if (dirtyRef.current) await persist(); await loadDocument(await managedApi.canvas(docRef.current!.objectId)) })}>刷新主干</button></header>
+      {error && <div className="mg-banner mg-error" role="alert">{error}{document && <button disabled={busy} onClick={() => void run(async () => { const old = docRef.current!, current = await managedApi.canvas(old.objectId); await managedApi.save({ expectedRevision: 0, title: `${titleRef.current} · 冲突恢复草稿`, graph: { ...graphRef.current, ownerSessionId: null, edges: graphRef.current.edges.filter(edge => !edge.data.relationId) } }); await loadDocument(current); setNotice('本地布局已另存为未绑定草稿；已载入服务器最新主干。') })}>保留布局副本并重新载入</button>}</div>}
+      {notice && <div className="mg-banner" role="status">{notice}</div>}
+      {cleanup.length > 0 && <div className="mg-banner mg-warning">引用已撤销，仍有 {cleanup.length} 个草稿气泡待清理。<button disabled={busy} onClick={() => void run(() => cleanReferences(cleanup))}>重试清理气泡</button></div>}
+      {!!graph.legacyEdges?.length && <div className="mg-banner mg-warning">保留 {graph.legacyEdges.length} 条旧知识线供维护面板核对；未转为上下文权限。</div>}
+      {graph.migration?.status === 'needs-review' && <div className="mg-banner mg-warning">旧图待确认归属：{graph.migration.reason || '开始会话时明确绑定目标，原图保留。'}</div>}
+      {document ? <><nav className="mg-actions" aria-label="画布操作"><button disabled={!editable} onClick={event => openMenu(event, {})}>画布更多操作</button>{selected && <><button disabled={!editable} onClick={event => openMenu(event, selectedNodeIds[0] ? { nodeId: selectedNodeIds[0] } : { edgeId: selectedEdgeIds[0] })}>所选对象更多操作</button><button disabled={!editable} onClick={() => void remove(selectedNodeIds, selectedEdgeIds)}>移除所选对象</button></>}<span>{graph.ownerSessionId ? `主干会话：${graph.nodes.find(node => node.data.logicalSessionId === graph.ownerSessionId)?.data.label ?? graph.ownerSessionId}` : '未绑定 · 首次开始会话时确定主干'} · 拖线确认上下文来源</span></nav>
+        <div className="mg-workbench"><div className="mg-flow"><ReactFlow<CanvasNode, Edge> key={document.objectId} onInit={instance => { flow.current = instance }} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={nodesChanged} onEdgesChange={changes => { const selections = changes.filter(change => change.type === 'select'); if (selections.length) setSelectedEdgeIds(old => { const ids = new Set(old); for (const item of selections) { if (item.selected) ids.add(item.id); else ids.delete(item.id) }; return [...ids] }) }} onConnect={onConnect} onNodeClick={(event, node) => { setSelectedNodeIds([node.id]); setSelectedEdgeIds([]); if ((event.target as Element).closest('[data-more]')) openMenu(event, { nodeId: node.id }); else setMenu(null) }} onNodeContextMenu={(event, node) => { setSelectedNodeIds([node.id]); setSelectedEdgeIds([]); openMenu(event, { nodeId: node.id }) }} onEdgeContextMenu={(event, edge) => { setSelectedEdgeIds([edge.id]); setSelectedNodeIds([]); openMenu(event, { edgeId: edge.id }) }} onPaneContextMenu={event => openMenu(event, { position: flow.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) })} onEdgeClick={(_event, edge) => { setSelectedEdgeIds([edge.id]); setSelectedNodeIds([]); setMenu(null) }} onPaneClick={() => { setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null) }} onMoveEnd={saveViewport} defaultViewport={graph.viewport} nodesDraggable={editable} nodesConnectable={editable} deleteKeyCode={null} fitView={!graph.viewport} minZoom={0.15} maxZoom={2} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} ariaLabelConfig={{ 'controls.fitView.ariaLabel': '适合画布', 'controls.zoomIn.ariaLabel': '放大画布', 'controls.zoomOut.ariaLabel': '缩小画布' }}><Background gap={22} size={1} /><Controls showInteractive={false} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} /></ReactFlow>
+          {!graph.nodes.length && <div className="mg-canvas-empty"><strong>右键添加空卡片或已有会话</strong><p>空卡片在开始会话时选择工作区；添加卡片不会创建上下文权限。</p></div>}
+        </div></div></> : <div className="mg-welcome"><h2>打开当前会话的主干，或创建一份草稿</h2><p>从来源指向接收会话；会话始终在真实会话页进行。</p><button disabled={busy || !status?.capabilities.mainGraph} onClick={() => void createDraft()}>新建未绑定草稿</button></div>}
     </main>
-    {network && <KnowledgeNetwork onClose={() => setNetwork(false)} onCanvas={async objectId => { if (dirty) throw new Error('请先保存当前画布，再打开另一份画布'); await loadCanvas(objectId); setNetwork(false) }} />}
-    {picker && <SessionPicker purpose={picker.purpose === 'reference' ? '引用到会话' : '添加真实会话'} canCreate={!busy} actionBusy={busy} actionError={error} onClose={() => { if (!busy) setPicker(null) }} onSelect={(item) => void chooseSession(item)} onCreate={() => void createSession()} />}
+    {menu && <><div className="mg-menu-dismiss" onPointerDown={() => setMenu(null)} onContextMenu={event => { event.preventDefault(); setMenu(null) }} /><div role="menu" className="mg-context-menu" onKeyDown={event => { if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return; event.preventDefault(); const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')); const index = items.indexOf(window.document.activeElement as HTMLButtonElement); items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus() }} style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 268)), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menuNode ? 290 : 260))), maxHeight: window.innerHeight - 24 }}>
+      {menuNode ? <><strong>{menuNode.data.label}</strong><button role="menuitem" disabled={busy || !status?.capabilities.sessions} onClick={() => start(menuNode)}>在此节点开始会话</button>{menuNode.data.logicalSessionId && <button role="menuitem" onClick={() => { setMenu(null); void loadPreview(menuNode.id) }}>查看来源</button>}<button role="menuitem" disabled={!editable} onClick={() => { setConnectSource(menuNode.id); setMenu(null) }}>连接到节点</button><button role="menuitem" disabled={!editable} onClick={() => { setRenameId(menuNode.id); setRename(menuNode.data.label); setMenu(null) }}>重命名</button><button role="menuitem" className="mg-danger" disabled={!editable} onClick={() => void remove([menuNode.id], [])}>移除卡片</button></> : menuEdge ? <><button role="menuitem" onClick={() => { setLogEdgeId(menuEdge.id); setMenu(null) }}>查看固定来源与读取位置</button>{menuEdge.data.kind === 'pending' && <button role="menuitem" disabled={!editable} onClick={() => void beginConnect(menuEdge.source, menuEdge.target)}>确认此连接的来源</button>}<button role="menuitem" className="mg-danger" disabled={!editable} onClick={() => void remove([], [menuEdge.id])}>移除边</button></> : <><button role="menuitem" disabled={!editable} onClick={() => { edit(old => addPlaceholder(old, `placeholder:${crypto.randomUUID()}`, menu.position)); setMenu(null) }}>添加空卡片</button><button role="menuitem" disabled={!editable} onClick={() => { setPicker({ purpose: 'add', position: menu.position, operationId: crypto.randomUUID() }); setMenu(null) }}>添加已有会话</button><button role="menuitem" disabled={!editable} onClick={align}>按来源排列</button><button role="menuitem" onClick={() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }); setMenu(null) }}>适合画布</button><button role="menuitem" disabled={!editable} onClick={() => { setShowObjects(true); setMenu(null); void run(() => loadObjects()) }}>关联已有对象</button><button role="menuitem" disabled={busy || !graph.ownerSessionId} onClick={() => { setMenu(null); void run(repairRelations) }}>导入当前目标已有引用（不新建权限）</button></>}
+    </div></>}
+    {picker && <SessionPicker key={picker.operationId} picker={picker} busy={busy} error={error} onClose={() => { if (!busy) setPicker(null) }} onSelect={item => void chooseSession(item)} onCreate={workspace => void createSession(workspace)} />}
+    {connectSource && <Dialog title="选择接收会话节点" onClose={() => setConnectSource(null)}><p>箭头从当前来源指向接收方。下一步确认已完成回复的固定上限。</p><div className="mg-picker-list">{graph.nodes.filter(node => node.id !== connectSource).map(node => <button className="mg-picker-item" key={node.id} disabled={busy} onClick={() => void beginConnect(connectSource, node.id)}>{node.data.label} · {NODE_LABELS[node.data.kind]}</button>)}</div></Dialog>}
+    {connection && <Dialog title="确认上下文来源" onClose={() => { if (!busy) setConnection(null) }}><p>{graph.nodes.find(node => node.id === connection.source)?.data.label} → {graph.nodes.find(node => node.id === connection.target)?.data.label}</p><p>允许读取截至回复 <code>{connection.preview.capture?.anchorId}</code>；固定版本 <code>{connection.preview.sourceVersionId}</code>。后续新增回复不会扩大这个上限。</p><div className="mg-preview">{connection.preview.items.map(item => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '来源问题' : '已完成回复的预览片段'}</small><p>{item.text}</p></article>)}</div><p>确认后加入接收会话草稿，由你检查并发送。</p><button className="mg-primary" disabled={busy || !status?.capabilities.references} onClick={() => void confirmConnection()}>确认固定来源并连接</button></Dialog>}
+    {renameId && <Dialog title="重命名卡片" onClose={() => setRenameId(null)}><input aria-label="卡片名称" maxLength={200} value={rename} onChange={event => setRename(event.target.value)} /><button disabled={!editable || !rename.trim()} onClick={() => { edit(old => ({ ...old, nodes: old.nodes.map(node => node.id === renameId ? { ...node, data: { ...node.data, label: rename.trim() } } : node) })); setRenameId(null) }}>保存名称</button></Dialog>}
+    {sourceChoices && <Dialog title="选择固定来源范围" onClose={() => setSourceChoices(null)}><p>此会话有多个独立引用，请选择要预览的固定来源。</p>{sourceChoices.bounds.map(bound => <button key={`${bound.sourceVersionId}:${bound.sourceAnchorId}`} onClick={() => void loadPreview(sourceChoices.nodeId, undefined, bound)}>{bound.sourceVersionId} · 截至 {bound.sourceAnchorId}</button>)}</Dialog>}
+    {previewNode && <Dialog title={`查看来源 · ${previewNode.data.label}`} onClose={() => { previewTicket.current++; setPreviewNodeId(null) }}><p>只读预览；此处的阅读不记为 AI 已读取。翻页固定本次来源版本。</p><div className="mg-preview">{previewBusy && <p>正在读取…</p>}{previewError && <p role="alert" className="mg-error">{previewError}</p>}{preview?.items.map(item => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '提问' : '回复'}{!item.complete ? ' · 分页片段' : ''}</small><div className="mg-source-text" onMouseUp={event => { if (item.role === 'assistant') captureSelection(event.currentTarget) }}>{item.text}</div></article>)}{selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references} onClick={() => { setPreviewNodeId(null); setPicker({ purpose: 'reference', capture: selection.capture, operationId: crypto.randomUUID() }) }}>引用到会话</button><button disabled={busy} onClick={() => void run(async () => { await parentRequest('session-sticker', { capture: selection.capture }) })}>建立会话贴纸</button></div>}{preview?.nextCursor && <button disabled={previewBusy} onClick={() => void loadPreview(previewNode.id, preview.nextCursor ?? undefined)}>继续读取这一来源</button>}</div></Dialog>}
+    {logEdge && document && <Dialog title="固定来源与读取位置" onClose={() => setLogEdgeId(null)}><p>{relationPresentation(logEdge, relations, confirmedDrafts).label}</p>{activeRelation ? <><p>允许截至回复：<code>{activeRelation.cutoffEventId}</code></p><p>固定版本：<code>{activeRelation.sourceVersionId}</code></p></> : <p>{logEdge.data.kind === 'pending' ? '连接尚未绑定，没有上下文读取权限。' : '引用元数据尚未载入。'}</p>}{relationCursor && <button disabled={busy} onClick={() => void run(() => loadRelations(graph.ownerSessionId, relationCursor))}>继续载入当前主干引用</button>}<DisclosurePanel objectId={document.objectId} referenceId={logEdge.data.relationId} /></Dialog>}
+    {showObjects && <Dialog title="关联已有对象" onClose={() => setShowObjects(false)}><select aria-label="对象类型" value={objectType.namespace} onChange={event => { const next = OBJECT_TYPES.find(item => item.namespace === event.target.value)!; setObjectType(next); void run(() => loadObjects(next)) }}>{OBJECT_TYPES.map(type => <option key={type.namespace} value={type.namespace}>{type.label}</option>)}</select><div className="mg-picker-list">{objects.filter(object => !object.deleted).map(object => <button className="mg-picker-item" key={object.objectId} disabled={busy} onClick={() => void addObject(object)}>{object.title}</button>)}{objectCursor && <button disabled={busy} onClick={() => void run(() => loadObjects(objectType, objectCursor))}>加载更多</button>}</div></Dialog>}
   </div>
 }

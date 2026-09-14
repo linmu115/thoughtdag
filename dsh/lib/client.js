@@ -85,20 +85,18 @@ window.__ModuleLoader__.load({
           window.dispatchEvent(new CustomEvent('dsh-session-sticker-open', { detail: input.capture ? { sessionId: input.capture.sourceSessionId, anchorId: input.capture.anchorId, selectedText: input.capture.selectedText } : undefined }))
           return { opened: true }
         }
-        if (operation === 'review-source') {
-          const target = await graphJson('resolve?logicalSessionId=' + encodeURIComponent(input.targetSessionId))
-          const preview = await graphJson('preview?logicalSessionId=' + encodeURIComponent(input.sourceSessionId))
-          if (!preview.capture) throw new Error('来源尚无已完成回复')
-          setMap(false)
-          const core = annotation()
-          const result = await core.addCrossSessionReference(target.nativeSessionId, { ...preview.capture, expectedSourceVersionId: preview.sourceVersionId }, { operationId: input.operationId })
-          await core.updateComment(target.nativeSessionId, result.referenceId, '来源有新内容。请结合这条最新来源，重新审视本会话相关回答，说明哪些判断需要调整。')
-          return { ...result, prepared: true }
-        }
         if (operation === 'open-session') {
           if (typeof input.nativeSessionId !== 'string' || !input.nativeSessionId.trim() || input.nativeSessionId.length > 256 || input.logicalSessionId !== undefined)
             throw new Error('打开会话需要已解析的原生会话身份，请重新选择目标')
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
+          const referenceIds = input.referenceIds ?? []
+          if (!Array.isArray(referenceIds) || referenceIds.length > 50 || referenceIds.some(id => typeof id !== 'string' || !id || id.length > 256)) throw new Error('入向引用身份无效或超过单次额度')
+          const uniqueReferences = [...new Set(referenceIds)].sort()
+          if (uniqueReferences.length) {
+            const core = annotation()
+            if (!core.features.includes('session-main-graph-v2') || typeof core.prepareGraphReferences !== 'function') throw new Error('请更新注释插件以准备主干入向引用')
+            await core.prepareGraphReferences(target.nativeSessionId, uniqueReferences)
+          }
           await ctx.sessions.refresh()
           await ctx.sessions.open(target.nativeSessionId)
           setMap(false); syncCurrent()
@@ -114,7 +112,7 @@ window.__ModuleLoader__.load({
           const core = annotation()
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
           const link = await core.resolveReferenceLink(target.nativeSessionId, input.referenceId)
-          if (!link) throw new Error('此会话中没有找到该引用')
+          if (!link) return { deleted: true }
           if (link.state === 'deleted') return { deleted: true }
           return core.deleteReferenceLink(target.nativeSessionId, link.setId, link.referenceId)
         }

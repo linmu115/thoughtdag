@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-import { resolve } from 'node:path'
 
 const NAMESPACE = 'thoughtdag'
 const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links', 'stickers'])
@@ -20,7 +18,7 @@ function service(ctx, name) {
 function capabilities(ctx) {
   const graph = service(ctx, 'maintenanceGraph')
   const bridge = service(ctx, 'maintenanceExtensionData')?.bridge
-  return { graph: graph?.protocolVersion === 1 ? graph : undefined, bridge }
+  return { graph: graph?.protocolVersion === 2 ? graph : undefined, bridge }
 }
 function bounded(value) {
   if (Buffer.byteLength(JSON.stringify(value)) > MAX_BYTES) throw new ManagedGraphError(413, '内容超过单次额度，请分成多个画布或缩小选段')
@@ -61,7 +59,6 @@ async function bodyOf(req) {
 
 /** Instance-bound bridge. It never accepts Engine credentials, paths or a run ID. */
 export function createManagedGraph(ctx) {
-  const creates = new Map()
   async function dispatch(operation, method, query, input) {
     const { graph, bridge } = capabilities(ctx)
     if (operation === 'status' && method === 'GET') {
@@ -74,7 +71,7 @@ export function createManagedGraph(ctx) {
         await graph.directory()
         sessions = true
       } catch (error) { reason = publicError(error) }
-      return { protocolVersion: 1, mode: 'maintenance', capabilities: { storage, sessions,
+      return { protocolVersion: 2, mode: 'maintenance', capabilities: { storage, sessions, mainGraph: !!graph,
         references: sessions && service(ctx, 'maintenanceSessionContext')?.protocolVersion === 1 }, ...(reason ? { reason } : {}) }
     }
     if (!graph || !bridge) throw new ManagedGraphError(503, '当前实例缺少匹配的会话图接口或存储，请检查维护插件配置')
@@ -95,9 +92,18 @@ export function createManagedGraph(ctx) {
         return graph.preview(id(query.get('logicalSessionId'), '会话身份'), cursor,
           version ? { sourceVersionId: version, sourceAnchorId: anchor } : undefined)
       }
-      if (operation === 'relations') return graph.relations(after)
-      if (operation === 'canvases') return bridge.list(NAMESPACE, after, 'all')
-      if (operation === 'canvas') return bridge.get(NAMESPACE, id(query.get('objectId'), '画布身份'))
+      if (operation === 'relations') return graph.relations(id(query.get('logicalSessionId'), '主干会话'), after)
+      if (operation === 'disclosures') return graph.disclosures(id(query.get('objectId'), '主干图'), after)
+      if (operation === 'create-workspaces') {
+        const knowledge = service(ctx, 'maintenanceKnowledge')
+        if (!knowledge?.dispatch) throw new ManagedGraphError(503, '当前维护插件尚未提供工作区创建接口')
+        return knowledge.dispatch('create-workspaces', after ? { after } : {})
+      }
+      if (operation === 'canvases') {
+        const page = await bridge.list(NAMESPACE, after, 'all')
+        return { ...page, items: page.items.filter(item => !item.objectId.startsWith('disclosures-')) }
+      }
+      if (operation === 'canvas') return graph.load(id(query.get('objectId'), '画布身份'))
       if (operation === 'objects') {
         const namespace = objectNamespace(query.get('namespace'))
         if (namespace === 'stickers') {
@@ -118,47 +124,27 @@ export function createManagedGraph(ctx) {
         return bridge.get(namespace, objectId)
       }
     }
-    if (method === 'POST' && operation === 'save') {
-      const objectId = id(input.objectId, '画布身份')
+    if (method === 'POST' && ['save', 'bind', 'remove'].includes(operation)) {
       if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw invalid('保存版本无效')
-      if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 500) throw invalid('画布标题无效')
-      if (input.deleted !== undefined && typeof input.deleted !== 'boolean') throw invalid('删除状态无效')
-      if (input.body?.managedSchema !== 1 || !Array.isArray(input.body.nodes) || !Array.isArray(input.body.edges)) throw invalid('画布格式不受支持')
-      // The Maintenance Adapter owns the strict graph schema. No second transcript.
-      const logicalIds = [...new Set(input.body.nodes.map(n => n?.data?.logicalSessionId).filter(v => typeof v === 'string'))]
-      if (logicalIds.length > 500) throw invalid('一个画布最多关联 500 个会话')
-      return bridge.save(NAMESPACE, objectId, input.expectedRevision,
-        { schemaVersion: 1, title: input.title, body: input.body, references: logicalIds.map(logicalSessionId => ({ logicalSessionId })) }, input.deleted ?? false)
+      const objectId = operation === 'save' ? optional(input.objectId, '主干图') : id(input.objectId, '主干图')
+      if (operation === 'bind') return graph.bind({ objectId, expectedRevision: input.expectedRevision, logicalSessionId: id(input.logicalSessionId, '主干会话') })
+      if (operation === 'remove') {
+        const identifiers = (value, label) => {
+          if (value === undefined) return []
+          if (!Array.isArray(value) || value.length > 500) throw invalid(label + '数量无效')
+          return [...new Set(value.map(item => id(item, label)))]
+        }
+        return graph.remove({ objectId, expectedRevision: input.expectedRevision, operationId: id(input.operationId, '移除操作'), nodeIds: identifiers(input.nodeIds, '卡片'), edgeIds: identifiers(input.edgeIds, '连接') })
+      }
+      if (input.graph?.managedSchema !== 2 || !Array.isArray(input.graph.nodes) || !Array.isArray(input.graph.edges)) throw invalid('主干格式不受支持，请升级匹配的维护插件')
+      if (input.title !== undefined && (typeof input.title !== 'string' || input.title.length > 500)) throw invalid('主干标题无效')
+      return graph.save({ ...(objectId ? { objectId } : {}), expectedRevision: input.expectedRevision, graph: input.graph, ...(input.title === undefined ? {} : { title: input.title }) })
     }
+    if (method === 'POST' && operation === 'ensure') return graph.ensure(id(input.logicalSessionId, '主干会话'))
     if (method === 'POST' && operation === 'create-session') {
-      const operationId = id(input.operationId, '创建操作')
-      const cwd = input.cwd === undefined ? undefined : id(input.cwd, '工作目录')
-      const signature = JSON.stringify([operationId, cwd ?? null])
-      const existing = creates.get(operationId)
-      if (existing && existing.signature !== signature) throw invalid('同一次创建操作的工作目录发生了变化')
-      if (existing) return existing.task
-      if (creates.size >= 128) throw new ManagedGraphError(429, '创建操作较多，请稍后重试')
-      // A stable native identity survives a lost HTTP reply or host restart.
-      const sessionId = 'td-' + createHash('sha256').update(operationId).digest('hex').slice(0, 32)
-      const task = (async () => {
-        let existingSession = ctx.sessions.get(sessionId)
-        if (!existingSession) {
-          try {
-            await graph.resolve({ nativeSessionId: sessionId })
-            existingSession = (await ctx.sessionController.resolveAgent(sessionId)).session
-          } catch (error) {
-            if (error?.code !== 'GRAPH_SESSION_NOT_FOUND') throw error
-          }
-        }
-        if (existingSession && cwd) {
-          const originalCwd = existingSession.header?.cwd ?? existingSession.header?.meta?.cwd
-          if (typeof originalCwd !== 'string' || resolve(originalCwd) !== resolve(cwd)) throw invalid('同一次创建操作的工作目录发生了变化')
-        }
-        if (!existingSession) await ctx.sessionController.create({ sessionId, ...(cwd ? { cwd } : {}) })
-        return graph.created(sessionId)
-      })()
-      creates.set(operationId, { signature, task })
-      try { return await task } finally { creates.delete(operationId) }
+      const knowledge = service(ctx, 'maintenanceKnowledge')
+      if (!knowledge?.dispatch) throw new ManagedGraphError(503, '当前维护插件尚未提供工作区创建接口')
+      return knowledge.dispatch('create-session', { operationId: id(input.operationId, '创建操作'), workspaceId: id(input.workspaceId, '工作区') })
     }
     throw new ManagedGraphError(404, '没有这个会话图操作')
   }

@@ -62,9 +62,7 @@ test('CAS conflict is returned to preserve local edits rather than thrown away',
   globalThis.window = fakeWindow().value
   globalThis.fetch = async () => new Response(JSON.stringify({ status: 'conflict', conflict: { current: { revision: 3 } } }), { status: 409 })
   try {
-    const result = await managedApi.save({ objectId: 'canvas', expectedRevision: 2, title: 'Local title', body: { managedSchema: 1, nodes: [], edges: [] } })
-    assert.equal(result.status, 'conflict')
-    assert.equal(result.conflict.current.revision, 3)
+    await assert.rejects(managedApi.save({ objectId: 'canvas', expectedRevision: 2, graph: { managedSchema: 2, ownerSessionId: null, nodes: [], edges: [] } }), error => error.status === 409)
   } finally { globalThis.window = previousWindow; globalThis.fetch = previousFetch }
 })
 
