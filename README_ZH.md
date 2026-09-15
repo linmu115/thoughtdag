@@ -1,274 +1,103 @@
-> 本地修改分支：DSH 插件现适配 **0.1.5-rc.2**，接入 Maintenance 会话图谱与 Annotation 引用。当前插件说明见 [DSH 接入文档](dsh/MANAGED.md)。下方保留上游独立应用介绍；其中上游发布包的安装命令不会安装本地修改版。
+# ThoughtDAG · DSH 会话主干图定制分支
 
-<div align="center">
+[English](README.md) · [DSH 安装与使用](dsh/README.md) · [完整主干图说明](dsh/MANAGED.md) · [独立应用](#独立应用)
 
-<img src="public/favicon.svg" width="72" alt="ThoughtDAG logo"/>
+本分支为 **DeepSeek Harness 0.1.5-rc.2** 增加每个会话自己的上下文主干图。从会话标题栏的 **对话 / 思维图** 切换视图，在图上整理来源，再回到真实 DSH 会话继续工作。仓库中的独立 ThoughtDAG 应用仍单独保留。
 
-# ThoughtDAG
+当前 DSH 插件源码版本为 **`dsh-thoughtdag` 0.4.14-rc2.8**。这是定制 RC2 接入版；版本号对应当前代码和已在本地验证的包，不表示同名 npm 包或公网下载附件已经发布。上游插件包不包含本分支的这些修改。
 
-**找到相关对话。决定模型下一步看到什么。**
+## DSH 面板的功能
 
-![License](https://img.shields.io/badge/许可-MIT-green)
-![Status](https://img.shields.io/badge/状态-活跃开发中-6B5CE7)
-
-### [下载桌面版 ↓](https://chenxiachan.github.io/thoughtdag/?lang=zh#download) · [官网](https://chenxiachan.github.io/thoughtdag/?lang=zh) · [使用文档](https://chenxiachan.github.io/thoughtdag/docs/zh/)
-
-[English](./README.md) · [DeepSeek Harness 插件](#新功能--deepseek-harness-插件上线) · [找回历史上下文](#新功能--跨-agent-精确定位所需上下文) · [可视化应用](#想进一步探索并可视化上下文) · [有何不同](#thoughtdag-和其他图形化-ai-工具有何不同) · [Agent 会话](#-把-agent-会话带进画布) · [研究](#-研究为什么上下文需要可编辑) · [完整文档](https://chenxiachan.github.io/thoughtdag/docs/zh/)
-
-</div>
-
-## 新功能 · DeepSeek Harness 插件上线！
-
-> ThoughtDAG 可以作为 DeepSeek Harness 网页界面里的一个视图运行：对话框上方多一个 对话 | 思维图 开关。画布决定 Harness 下一步看到什么，Harness 负责把这一轮跑完。
-
-```bash
-dsh plugin --profile web add https://github.com/chenxiachan/thoughtdag/releases/download/v0.4.14/dsh-thoughtdag-0.4.14.tgz
-dsh web
-```
-
-> **为什么这里是文件链接而不是包名（9 月 14 日前）。** 插件 0.4.11 和 0.4.12 的模型选择器里，「Harness · 模型」这一组 Agent 条目会消失。修复已经发布，但 npm 包被账号的临时冷却期挡住，9 月 14 日前 `add dsh-thoughtdag` 装到的仍是 0.4.12；上面的文件就是修复版。9 月 15 日起，安装命令恢复为 `dsh plugin --profile web add dsh-thoughtdag`。无论从文件还是从 npm 装的，更新都用 `dsh plugin --profile web add dsh-thoughtdag@latest`（应用内的更新提示复制的就是这条）。
-
-- **Agent 对话地图看到四家。** Harness 自己的会话和 Claude Code、Codex、Pi 并列；打开一个就是一张图，随对话实时生长。
-- **在画布上提问。** 选 Harness 的任一模型，或选 **DeepSeek Harness · Agent**，问题作为一轮真实的 Harness 对话执行，工具随它用。回答流回节点，这一轮留在 Harness 的会话日志里。
-- **连线决定 Harness 看到什么。** 连进问题的材料、笔记和节点就是它收到的上下文；在镜像会话的链尾追问，会续接那个会话。
-
-<img src="docs/harness-plugin-zh.gif" alt="ThoughtDAG 在 DeepSeek Harness 里：对话框上方的 对话 | 思维图 开关，在画布上提问、由 Harness 的模型回答，再追问长出新节点" width="100%"/>
-
-插件自带画布，不需要另装 ThoughtDAG。需要 Node 22.19 以上和 DeepSeek Harness 0.1.2-rc 及之后版本。
-
-## 新功能 · 跨 Agent 精确定位所需上下文
-
-> 从一个代码文件、一句记得的原话、一个网址或一篇论文出发。ThoughtDAG 检索本机上的 Agent 对话，并带你回到命中的那一轮。
-
-无需安装，直接试用：
-
-```bash
-npx thoughtdag why src/lib/api.ts
-npx thoughtdag find "你记得的一句话"
-```
-
-日常使用时，安装 CLI 并接入只读 MCP 工具：
-
-```bash
-npm install -g thoughtdag
-thoughtdag setup mcp
-```
-
-之后 Agent 可以直接调用 `why_check`、`why_file`、`find` 和 `recall_turn`。Claude Code、Codex、DeepSeek Harness、Pi 与 ThoughtDAG 画布里的对话会在本机进入同一份索引；不安装桌面版也能使用。
-
-### 它能找到什么
-
-#### 哪些对话修改或提及过这个代码
-
-```text
-$ npx thoughtdag why src/lib/api.ts
-why src/lib/api.ts · 12 个相关轮次，来自 6 个会话
-claude-code  ✏️ 修改  Q: 能否判断模型是否支持多模态？
-             Δ storedProviders → storedProviders, storedVision…
-……
-```
-
-#### 哪些对话提过这个概念
-
-```text
-$ npx thoughtdag find "context.committed" --in q
-find "context.committed" · 21 个相关轮次，来自 12 个会话
-claude-code  Q: ……把 context.committed 加入事件契约……
-codex        Q: ……context.committed 已经实现了一半……
-……
-```
-
-#### 哪些对话聊过这个文件、论文或网页
-
-```text
-$ npx thoughtdag find "arxiv" --in m
-find "arxiv" · 1 个相关轮次，来自 1 张画布
-thoughtdag   M: ……集体智能、人工生命 · arXiv:2606.26733……
-```
-
-来自真实本地结果，仅保留最有用的几行。
-
-> **让 Agent 少读无关历史，显著降低上下文污染导致的幻觉与错误，减少 token 浪费，提高回答准确率。** 查询层只带回命中的历史；画布层剪掉污染分支，不让它继续影响下一个回答。
-
-## 想进一步探索并可视化上下文？
-
-完整版桌面应用提供 Agent 对话地图、可编辑上下文画布、PDF/文件阅读器、模型与搜索接入、摘取、导出和交接。
-
-```bash
-brew install --cask thoughtdag
-```
-
-也可以前往[下载页](https://chenxiachan.github.io/thoughtdag/?lang=zh#download)获取 macOS、Windows 与 Linux 版本。
-
-<div align="center">
-
-<img src="docs/hero-demo-zh.gif" alt="ThoughtDAG Hero 演示：从 PDF 原文提问，删边修改模型上下文，缩小画布形成思维地图，导出备份，并通过 Session Atlas 把分散的 Agent 会话变成持续存在的项目上下文" width="100%"/>
-
-</div>
-
-**[▶ 33 秒旁白讲解](https://github.com/user-attachments/assets/f0362497-0e80-4caa-8214-cdbac92ab77c)**
-
-## 唯一法则
-
-> **连线即上下文。** 模型看到的，精确等于连进节点的内容。编辑图，就是在编辑模型的记忆。
-
-很多工具都把对话放上画布。在 ThoughtDAG 里，连线不是装饰，也不是执行路径。它决定模型下一次看到什么。
-
-## 它长什么样
-
-每个手势背后是同一条原则：**人在回路上，模型在连线上**。没有自主代理替你改图。
-
-<table>
-<tr>
-<td width="45%"><img src="docs/illus/prune-zh.svg" alt="示意图：研究主链与总结节点由实线相连，通往晚饭节点的边被剪断成红色虚线"/></td>
-<td width="55%">
-
-### ✂️ 删一条边，换一个答案
-
-模型只看到连进来的内容。删掉噪音边，同一个问题返回干净的回答。**在示例画布第 ③ 区亲手复现。**
-
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="55%">
-
-### 📖 把文献读成思维地图
-
-圈选一段直接提问，答案带着页码落进画布，p.N 芯片一键跳回原文。**读完论文，地图已经画好。**
-
-</td>
-<td width="45%"><img src="docs/illus/reading-zh.svg" alt="示意图：在原文页面圈选一段文字，旁边浮出紫色提问气泡，段落带 p.3 出处"/></td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="45%"><img src="docs/illus/map-zh.svg" alt="示意图：三个收获句门牌，分别带排除、决策、转向徽章，虚线相连"/></td>
-<td width="55%">
-
-### 💎 先凝练，再把整张地图带走
-
-节点可以合并成更高一层的结论，高光可以串成带引用的文字。继续缩小，完整卡片会收拢成收获句和图标骨架；最后，把当前结构导出成明暗两色的思路地图。
-
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="55%">
-
-### 🧭 把 Agent 会话带进画布
-
-把散落在不同 Agent 里的工作，汇成一张可编辑的上下文图。从任意节点继续探索，再把新的结果接回思路开始的地方。
-
-*目前支持本机 Claude Code、Codex、DeepSeek Harness 与 Pi 会话，更多 Agent 正在接入；源会话始终只读。*
-
-</td>
-<td width="45%"><img src="docs/illus/atlas-zh.svg" alt="示意图：按项目归类本机 Codex 与 Claude Code 会话，展开为上下文图，再带着选定上下文进入新的 CLI 会话"/></td>
-</tr>
-</table>
-
-## ThoughtDAG 和其他图形化 AI 工具有何不同
-
-很多产品都有节点和连线，但这张图在不同产品中做的事并不一样。
-
-| 产品类别 | 与 ThoughtDAG 的区别 |
+| 功能 | 实际行为 |
 |---|---|
-| 线性对话 | 上下文沿一条时间线累积；ThoughtDAG 可选择和合并可见路径。 |
-| 思维导图与数字白板 | 连线主要帮人整理概念；ThoughtDAG 的连线还会改变模型输入。 |
-| 分支对话画布 | 通常沿一条父链继承；ThoughtDAG 还能合并或剪枝多条路径。 |
-| 工作流与 Agent 画布 | 连线用于运行任务和传递数据；ThoughtDAG 的连线用于控制对话上下文。 |
-| RAG 与自动记忆 | 系统自动检索上下文；ThoughtDAG 让选择过程可见、可编辑。 |
-| 代码结构图工具 | 它们回答“和什么相连”；ThoughtDAG 找到塑造它的对话与决策。 |
-| Agent 记忆与对话检索 | 它们找回文本；ThoughtDAG 索引 Agent 对文件和材料做过什么，并让你控制哪些上下文继续向前。 |
-| Harness 上下文查看器 | 它们显示会话当前携带了什么；ThoughtDAG 让你编排下一轮收到什么，并作为真实的一轮发出去。 |
+| 每会话主干 | 来源 X → 接收会话 Y 的引用属于 Y 的主干。打开面板复用这一会话的图，不为所有历史会话批量建图。 |
+| 真实会话卡片 | 已有卡片打开原生会话；空卡片在开始时选择工作区，确认后创建并绑定真实会话。 |
+| 上下文连线 | 确认来源后，连接记录固定源版本与允许读取的已完成回复上限。空卡片和待绑定连线不授予读取权限。 |
+| 上下布局 | 来源在上、接收方在下，连接点分布在卡片上下。同链竖向对齐；已保存位置、手动位置和右键落点保留。 |
+| DSH 原生主题 | 卡片、菜单、预览、日志与明暗主题、配色、字体同步；对话/思维图切换时按钮位置自然衔接。 |
+| 读取位置可见 | 从边查看固定截止、实际返回范围、交付状态、继续位置、预算和截断情况。 |
+| 删除与归档同步 | 删除来源蓝色引用或归档会话后，主干按权威记录更新；同步保留本地未保存的布局修改。 |
 
-ThoughtDAG 是一张由人编辑的上下文图：连入节点的路径与显式引用构成下一次请求，被排除的内容则继续留在画布上。
+面板通过 Maintenance 解析会话身份、保存图结构和读取固定来源，通过 Annotation Core 准备引用。嵌入模式没有常驻问答框，不保存第二份原生会话历史，也不使用独立模型代理来回答。
 
-## 🗺️ 你可以导出你的思维的形状
+## 开始使用
 
-导出图保留节点、连线与结构统计，不画具体问答。问题不同，探索方式不同，最后留下的思路形状也不同。
+先按 [DSH 插件指南](dsh/README.md) 在同一实例安装配套 RC2 包，然后：
 
-<img src="docs/thought-map-four-zh.png" alt="四张思路地图，分别呈现一条深入主线、五条探索支线、持续三周的问题与一整个文献综述季" width="100%"/>
+1. 打开一个真实会话，点击标题栏 **思维图**。
+2. 右键画布空白，选择 **添加空卡片** 或 **添加已有会话**。已有会话按工作区查找。
+3. 右键卡片，选择 **在此节点开始会话**。空卡片先选择工作区，再确认创建；取消不会创建。已绑定卡片直接进入原会话。
+4. 从来源卡片下方连接点拖到接收卡片上方，或使用 **连接到节点**；确认已完成回复及固定来源版本后建立引用。
+5. 在真实会话中继续输入。插件准备合法入向引用，保留已有正文、草稿和附件，由你检查后发送。
 
-## 更多运行方式
+| 右键位置 | 可用操作 |
+|---|---|
+| 画布空白 | 添加空卡片、添加已有会话、按来源排列、适合画布、关联已有对象、明确导入当前目标的已有引用。 |
+| 卡片 | 开始真实会话、查看来源、连接到节点、重命名、移除卡片。 |
+| 边 | 查看固定来源与读取位置、确认待绑定连接的来源、移除边。 |
 
-### 从源码运行
+触屏可使用卡片 **⋯** 和 **画布更多操作**；键盘可使用 **Shift+F10**、方向键、**Escape**，并通过 **Delete/Backspace** 移除所选对象。不同入口使用同一撤销规则。
 
-```bash
-npm install
-npm run server    # LLM 代理 :3001
-npm run dev       # → localhost:5173
-# 无 .env 时，在应用内连接任意兼容 OpenAI 协议的接口即可
+## 定界上下文与按需披露
+
+每条引用固定一个来源版本和允许读取的最后一条已完成回复。来源后来追加内容，不会扩大这条引用的范围。首次发送可在预算内带入所选回复所在的问答轮次；此前获准访问的历史通过读取、搜索工具按需提供，而不是把整份来源历史塞进每次请求。
+
+卡片的 **查看来源** 是只读弹层。同一来源有多条独立固定引用时，可以选择范围。选中的文字仍可制作材料卡、引用到其他会话，或建立会话贴纸。
+
+边的 **查看固定来源与读取位置** 展示实际状态：**已准备** 不等于确认交付，**已返回** 记录本次返回范围，**未交付** 记录失败。搜索命中不代表读完全文，你自己的预览也不代表 AI 已读取。日志还会说明继续位置、片段是否完整、预算及早期记录裁剪。
+
+## 删除、归档与恢复
+
+- 安装 [会话贴纸插件](https://github.com/linmu115/dsh-session-sticker-board/tree/codex/rc2-session-context-graph) 后，来源选文旁的蓝色符号可以进入引用它的真实会话。右键符号可进入会话或精确删除一条引用；同一位置的其他引用、普通红色贴纸及其高亮保留。
+- 移除卡片或边会撤销受影响引用，不删除真实会话，也不改写既有回答。
+- 归档来源或接收会话会撤销相关活动引用、清除相关待绑定连线，并归档该会话自己的主干。已经打开的图变为只读，未保存布局仍保留，可另存为草稿。
+- 恢复会话会恢复因该会话归档的主干，不恢复已撤销引用或已清除连接；手动删除的图也不会因此恢复。
+- 引用变化、面板重开和窗口恢复时自动核对；面板可见时每 10 秒补充核对。遇到保存冲突仍保留本地修改，并可另存不带引用权限的布局草稿。
+- 开始会话失败时会保留服务错误，并提供 **刷新引用并重试开始**、**返回对话检查**。不会跳过引用校验强行进入或发送。
+
+旧图迁移保留原对象；未确认的旧知识线不是上下文权限。**导入当前目标已有引用** 只导入该接收方已存在的合法引用，不创建新权限，也不复活已移除引用。详见 [主干与迁移](dsh/MANAGED.md#主干与迁移)。
+
+## 构建 DSH 插件
+
+[插件声明](dsh/package.json)要求 Node **22.x 的 22.19 及以上版本，或 24 及以上版本**。在仓库根目录执行：
+
+```sh
+npm ci
+npm run dsh:build
+cd dsh
+npm pack
 ```
 
-环境变量、本地模型与连接方式 → [docs/setup_ZH.md](docs/setup_ZH.md)
+构建后得到本地 `dsh-thoughtdag-0.4.14-rc2.8.tgz`。安装时需配套 Maintenance 与 Annotation；[插件指南](dsh/README.md)给出了已验证版本组合及目标 profile 安装流程。使用上游下载链接、裸包名或 `@latest` 不能选择这个定制分支。
 
-### 在线体验
+本地验证：
 
-想先花十秒看看再决定装不装？[在线 Demo](https://app.thoughtdag.workers.dev) 在浏览器里直接跑，示例画布免 key。注意它是功能子集：Agent 对话地图、本机会话发现、免 key 联网搜索、部分直连工具和订阅桥只在桌面版/本地可用。
+```sh
+node --experimental-strip-types --test src/maintenance/model.test.mjs src/maintenance/client.test.mjs src/maintenance/sync.test.mjs dsh/tests/managed-host.test.mjs dsh/tests/managed-client.test.mjs
+npm run dsh:build
+```
 
-## 🧪 研究：为什么上下文需要可编辑
+本轮图与引用改动有 35 项合成测试通过，并通过类型检查和构建。可查阅 [引用同步记录](docs/changes/2026-09-15-graph-reference-refresh.md)、[布局与主题记录](docs/changes/2026-09-15-vertical-layout-dsh-theme.md)及 [整组生命周期验收报告](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md)。本地包和实例验收与公网发布是不同步骤。
 
-### 上下文干预基准 · Pilot v2
+## 独立应用
 
-`9 个模型` · `1,485 次测试` · `全程免费档 $0` · `答案精确匹配打分`
+独立 Web/桌面版保留 ThoughtDAG 原有的问答画布、Session Atlas、PDF/文件阅读器、模型连接、素材摘取、导出及本地会话搜索。它的画布执行与存储独立于上面介绍的 DSH 受管面板。
 
-上下文的问题不只是随对话变长而衰减。错误的信息会流入后续的回答，影响之后每个结论的可信度和真实性。我们的 benchmark 实验验证了九个语言模型，发现这个特性广泛存在：只删掉最初说错的那条消息往往不够，因为后续回答仍然带着这个错误。要恢复正确答案，需要把受影响的整段对话一起清理，或者让模型重写这一段。在一个可以开关逐步思考的模型上，最小化的清理只在思考开启时有效。上下文需要管理，而不只是累积。
+从源码启动独立版：
 
-完整报告解释了方法、数字与统计，以及这个实验能说明什么、不能说明什么。它不做模型排名，也不解释模型内部机制，只检验一个可观察的问题：改变模型看到的内容，会不会改变它接下来的回答。
+```sh
+npm ci
+npm run server    # 模型代理，端口 3001
+# 另开一个终端：
+npm run dev       # Vite 应用，通常为端口 5173
+```
 
-📖 **[阅读首轮案例](https://chenxiachan.github.io/thoughtdag/stories/context-repair/?lang=zh)** · 📊 **[实验方法与结果（英文技术报告）](https://chenxiachan.github.io/thoughtdag/research/context-repair-pilot-v2/)** · 💬 **[建议下一轮测试模型](https://github.com/chenxiachan/thoughtdag/issues/new)**
+在应用内配置模型，或按文档设置环境变量。相关说明：[模型配置](docs/setup_ZH.md)、[功能清单](docs/features_ZH.md)、[桌面打包配置](desktop/package.json)、[CLI 指南](cli/README.md)。本仓 CLI 可执行 `npm run cli:build` 构建，再用 `node cli/dist/thoughtdag.mjs --help` 查看用法。
 
-## 更多能力
+[上游项目](https://github.com/chenxiachan/thoughtdag)提供独立版发布物与产品说明；上游发布物不包含本分支当前的 DSH 接入修改。
 
-| 能力 | 说明 |
-|------|------|
-| 📤 只读分享 | 一条链接携带整张图，无账号、不经服务器存储 |
-| 🧭 陈旧重放 | 上游一改，受影响回答亮标记；按依赖序批量重放，先报 token 价 |
-| ✂️ 摘取 | 阅读器里圈选文字、框选图表，摘成带页码出处的画布素材 |
-| 🔌 模型自由 | 节点级钉选、沿线继承；纯文本模型经伴随文本读图 |
-| 🧭 Agent 会话接续 | 把不同 Agent 的会话汇入同一张图，从任意节点继续，再把结果接回原图 |
-| 🔒 本地优先 | 自动文件夹备份写成真实文件，指向同步盘即跨设备 |
+## 来源与贡献
 
-完整功能清单（60+ 条，按领域分组）→ [docs/features_ZH.md](docs/features_ZH.md)
+ThoughtDAG 由 Xia Chen 及上游贡献者创建。本分支保留独立应用，并增加 DSH 受管集成。提交修改时，请说明范围是独立应用，还是 `src/maintenance/`、`dsh/` 下的 DSH 面板。
 
-## 模型、成本与隐私
-
-连接本地 Ollama 或任意兼容 OpenAI 协议的端点。内置预设、订阅接入与环境变量说明统一放在[配置文档](docs/setup_ZH.md)。
-
-- **免费档模型覆盖全部功能**；本地 Ollama 完全离线
-- **桌面版一切都在本机**：画布、key、文档；在线 Demo 的模型流量浏览器直连，key 不经服务器
-- **PDF 不离机**，只有提取文本随提问发出
-- **在 DeepSeek Harness 里，模型调用走 Harness 自己的接入和 key**；ThoughtDAG 不另加 key，图片和链接抓取也走 Harness 的附件库与受限抓取器
-- **备份格式向后兼容**；Markdown 导出是永久逃生门
-
-## 贡献者
-
-<a href="https://github.com/KehanLiu" title="@KehanLiu"><img src="https://github.com/KehanLiu.png?size=80" width="40" height="40" alt="@KehanLiu" /></a>
-<a href="https://github.com/nasodaengineer" title="@nasodaengineer"><img src="https://github.com/nasodaengineer.png?size=80" width="40" height="40" alt="@nasodaengineer" /></a>
-<a href="https://github.com/hexu321" title="@hexu321"><img src="https://github.com/hexu321.png?size=80" width="40" height="40" alt="@hexu321" /></a>
-<a href="https://github.com/Moya-Doc" title="@Moya-Doc"><img src="https://github.com/Moya-Doc.png?size=80" width="40" height="40" alt="@Moya-Doc" /></a>
-<a href="https://github.com/nanami-0713" title="@nanami-0713"><img src="https://github.com/nanami-0713.png?size=80" width="40" height="40" alt="@nanami-0713" /></a>
-
-欢迎参与贡献，从 [CONTRIBUTING_ZH.md](./CONTRIBUTING_ZH.md) 开始。
-
-## 支持者
-
-感谢首位支持者 **@andreilaiter**，也感谢每一位帮助这个独立开源项目继续成长的人。
-
-<a href="https://buymeacoffee.com/chatchan92"><img src="docs/supporters/support-thoughtdag.svg" alt="支持 ThoughtDAG" width="252" /></a>
-
----
-
-<div align="center">
-
-*图无环，环是人。*
-
-[MIT](./LICENSE) © 2026 Xia Chen · [Roadmap](docs/features_ZH.md#roadmap) · [反馈](https://github.com/chenxiachan/thoughtdag/issues) · [引用](https://github.com/chenxiachan/thoughtdag#cite-this-repository)
-
-</div>
+[贡献指南](CONTRIBUTING_ZH.md) · [MIT 许可](LICENSE) · [上游仓库](https://github.com/chenxiachan/thoughtdag)

@@ -1,276 +1,103 @@
-> Local fork: the DSH plugin on this branch targets **0.1.5-rc.2** and uses the Maintenance session graph and Annotation reference services. Read [the current DSH integration guide](dsh/MANAGED.md). The upstream product description below remains relevant to the standalone app; its published plugin install commands do not install this local fork.
+# ThoughtDAG · DSH session graph fork
 
-<div align="center">
+[中文](README_ZH.md) · [DSH installation and use](dsh/README.md) · [Detailed graph guide](dsh/MANAGED.md) · [Standalone app](#standalone-app)
 
-<img src="public/favicon.svg" width="72" alt="ThoughtDAG logo"/>
+This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-# ThoughtDAG
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.8**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
 
-**Find the conversations. Decide what the model sees next.**
+## What the DSH panel does
 
-![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-active_development-6B5CE7)
-
-### [Download ↓](https://chenxiachan.github.io/thoughtdag/#download) · [Website](https://chenxiachan.github.io/thoughtdag/) · [Docs](https://chenxiachan.github.io/thoughtdag/docs/)
-
-[中文](./README_ZH.md) · [DeepSeek Harness plugin](#new--deepseek-harness-available) · [Find past context](#new--pinpoint-the-context-you-need-across-agents) · [Visual app](#want-to-explore-and-shape-the-context-visually) · [How it differs](#how-thoughtdag-differs) · [Session Atlas](#-session-atlas-bring-agent-conversations-onto-the-canvas) · [Research](#-research-why-editable-context-matters) · [Documentation](https://chenxiachan.github.io/thoughtdag/docs/)
-
-</div>
-
-## New · DeepSeek Harness Available!
-
-> ThoughtDAG runs as a view inside the DeepSeek Harness web UI: a 对话 | 思维图 switch above the chat. The canvas is where you decide what the harness sees next; the harness runs the turn.
-
-```bash
-dsh plugin --profile web add https://github.com/chenxiachan/thoughtdag/releases/download/v0.4.14/dsh-thoughtdag-0.4.14.tgz
-dsh web
-```
-
-> **Why a file URL instead of the package name (until September 14).** Plugin 0.4.11 and 0.4.12 lose the **Harness · model** agent entries in the model picker. The fix is out, but the npm package is held by a temporary account cooldown, so `add dsh-thoughtdag` still installs 0.4.12 until September 14; the file above is the same fixed build. From September 15, `dsh plugin --profile web add dsh-thoughtdag` is the install command again. To update any install, from the file or from npm, run `dsh plugin --profile web add dsh-thoughtdag@latest` (the in-app update hint copies this command).
-
-- **Session Atlas sees all four agents.** The harness's own sessions sit beside Claude Code, Codex and Pi; open one as a graph and it follows the conversation live.
-- **Ask from the canvas.** Pick one of the harness's models, or **DeepSeek Harness · Agent** to run the question as a real harness turn with tools. The answer streams back into the node, and the turn stays in the harness's session log.
-- **The wires decide what the harness sees.** Materials, notes and nodes wired into a question arrive as its context; a follow-up at the tail of a mirrored session continues that session.
-
-<img src="docs/harness-plugin-en.gif" alt="ThoughtDAG inside DeepSeek Harness: the 对话 | 思维图 switch above the chat, a question asked on the canvas and answered by a harness model, then a follow-up node growing the graph" width="100%"/>
-
-The plugin bundles the canvas; no other ThoughtDAG install is needed. Requires Node 22.19+ and DeepSeek Harness 0.1.2-rc or later.
-
-## New · Pinpoint the context you need across agents
-
-> Start with a code file, an exact phrase, a URL, or a paper. ThoughtDAG searches your local agent conversations and takes you back to the matching turn.
-
-Try it without installing anything:
-
-```bash
-npx thoughtdag why src/lib/api.ts
-npx thoughtdag find "a phrase you remember"
-```
-
-For regular use, install the CLI and connect its read-only MCP tools:
-
-```bash
-npm install -g thoughtdag
-thoughtdag setup mcp
-```
-
-Your agent can then call `why_check`, `why_file`, `find`, and `recall_turn` directly. Conversations from Claude Code, Codex, DeepSeek Harness, Pi, and ThoughtDAG canvases are indexed together on your machine; the desktop app is not required.
-
-### What it can find
-
-#### Which conversations changed or mentioned this code
-
-```text
-$ npx thoughtdag why src/lib/api.ts
-why src/lib/api.ts · 12 turns in 6 sessions
-claude-code  ✏️ edit  Q: Can the API detect vision support?
-             Δ storedProviders → storedProviders, storedVision…
-…
-```
-
-#### Which conversations discussed this concept
-
-```text
-$ npx thoughtdag find "context.committed" --in q
-find "context.committed" · 21 turns in 12 sessions
-claude-code  Q: …add context.committed to the event contract…
-codex        Q: …context.committed is already half implemented…
-…
-```
-
-#### Which conversations discussed this file, paper, or webpage
-
-```text
-$ npx thoughtdag find "arxiv" --in m
-find "arxiv" · 1 turn in 1 canvas
-thoughtdag   M: …collective intelligence, artificial life · arXiv:2606.26733…
-```
-
-Real local results, shortened to the most useful lines.
-
-> **Give agents less irrelevant history. Reduce context-driven hallucinations and wasted tokens. Improve answer accuracy.** The query layer brings back only the matching history; the canvas lets you cut contaminated branches before they shape the next answer.
-
-## Want to explore and shape the context visually?
-
-The full desktop app adds Session Atlas, an editable context canvas, PDF and file readers, model and search connections, clipping, export, and handoff.
-
-```bash
-brew install --cask thoughtdag
-```
-
-Or use the [download page](https://chenxiachan.github.io/thoughtdag/#download) for macOS, Windows, and Linux.
-
-<div align="center">
-
-<img src="docs/hero-demo-en.gif" alt="ThoughtDAG hero demo: asking from a PDF passage, editing model context by removing an edge, zooming out into a thought map, exporting a backup, and turning scattered agent sessions into persistent project context with Session Atlas" width="100%"/>
-
-<p align="center"><a href="https://www.youtube.com/watch?v=-8BqAyaoNXQ"><img src="https://img.youtube.com/vi/-8BqAyaoNXQ/maxresdefault.jpg" alt="YouTube thumbnail for the ThoughtDAG narrated tour" width="640" /></a></p>
-
-**[▶ The 33-second narrated tour](https://www.youtube.com/watch?v=-8BqAyaoNXQ)**
-
-</div>
-
-## The one rule
-
-> **Wires are the context.** What the model sees is exactly what wires into the node. Editing the graph edits the model's memory.
-
-Many tools put conversations on a canvas. In ThoughtDAG, a wire is not decoration or an execution route. It determines what the model sees next.
-
-## In action
-
-One principle behind every gesture: **the human in the loop, the model on the wires**. No autonomous agent redraws your graph.
-
-<table>
-<tr>
-<td width="45%"><img src="docs/illus/prune-en.svg" alt="Illustration: the research chain wired to a summary node, with the edge to a dinner node cut into a red dashed line"/></td>
-<td width="55%">
-
-### ✂️ Delete one edge, get a different answer
-
-The model sees only what wires in. Delete the noise edge, ask again, and the same prompt returns a clean answer. **Reproduce it in chapter ③ of the example canvas.**
-
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="55%">
-
-### 📖 Read a paper into a map
-
-Select a passage, ask right there. The answer lands on the canvas with its page number, and the p.N chip jumps back to the page. **Finish the paper, and the map is drawn.**
-
-</td>
-<td width="45%"><img src="docs/illus/reading-en.svg" alt="Illustration: a passage selected on the original page, a purple ask bubble beside it, the paragraph tagged p.3"/></td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="45%"><img src="docs/illus/map-en.svg" alt="Illustration: three takeaway plaques with ruled-out, decided and pivoted badges, linked by dashed lines"/></td>
-<td width="55%">
-
-### 💎 Condense, zoom out, and export the shape
-
-Merge nodes into a higher conclusion; weave highlights into cited prose. Zoom through full cards, takeaway plaques and an icon skeleton. Then export the current structure as a light or dark Thought Map.
-
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="55%">
-
-### 🧭 Session Atlas: bring agent conversations onto the canvas
-
-Bring work scattered across different agents into one editable context graph. Continue from any node, then bring the new work back to where the thought began.
-
-*Currently supports local Claude Code, Codex, DeepSeek Harness, and Pi sessions, with more agent integrations in development. Source sessions remain read-only.*
-
-</td>
-<td width="45%"><img src="docs/illus/atlas-en.svg" alt="Illustration: local Codex and Claude Code sessions grouped by project, opened as a context graph, then continued in a fresh CLI session"/></td>
-</tr>
-</table>
-
-## How ThoughtDAG differs
-
-Many products use nodes and edges, but the graph does a different job in each category.
-
-| Product category | How it differs from ThoughtDAG |
+| Capability | Behavior |
 |---|---|
-| Linear chat | Context follows one chronological thread; ThoughtDAG selects and merges visible paths. |
-| Mind maps and whiteboards | Edges organize ideas for people; ThoughtDAG edges also change model input. |
-| Branching chat canvases | They usually follow one inherited branch; ThoughtDAG can merge or prune several paths. |
-| Workflow and agent canvases | Edges run tasks and data; ThoughtDAG edges control conversational context. |
-| RAG and automatic memory | The system retrieves context automatically; ThoughtDAG makes the selection visible and editable. |
-| Code structure graphs | They answer what connects to what; ThoughtDAG finds the conversations and decisions that shaped it. |
-| Agent memory and conversation search | They retrieve text; ThoughtDAG indexes what agents did to files and materials, then lets you control what moves forward. |
-| Harness context viewers | They show what a session carries now; ThoughtDAG lets you compose what the next turn receives, and sends it as a real turn. |
+| One main graph per receiving session | A reference from source X to target Y belongs to Y's graph. Opening the panel reuses that session's graph; it does not generate graphs for every historical session. |
+| Real session cards | Existing cards open their native conversation. Empty cards ask for a workspace when you start them, then create and bind a real session. |
+| Context connections | A confirmed connection grants access to a fixed source version through a chosen completed reply. Empty cards and pending connections grant no reading permission. |
+| Vertical layout | Sources appear above the receiver, with top and bottom handles. Existing saved positions and explicit right-click placement remain intact. |
+| Native appearance | Cards, menus, previews and logs follow DSH's light/dark theme, colors and font. The dialog/map switch keeps its position across views. |
+| Reading transparency | An edge opens its fixed source boundary and disclosure log: returned ranges, delivery status, continuation position, limits and truncation. |
+| Reference and archive sync | Deleting a blue source reference or archiving a session updates the authoritative graph. Refresh preserves unsaved layout edits while applying reference removals. |
 
-ThoughtDAG is a user-authored context graph: incoming paths and explicit references form the next request, while excluded work stays visible on the canvas.
+The panel uses Maintenance for session identity, graph storage and fixed source access, and Annotation Core for reference preparation. The embedded view has no persistent chat composer, does not keep a second copy of native conversation history, and does not run its own model requests.
 
-## 🗺️ Export the shape of your thinking
+## Quick start in DSH
 
-The export keeps the nodes, wires and high-level structural counts. Different questions and different ways of exploring them leave visibly different maps.
+Install the matching RC2 package set in one instance, following the [plugin guide](dsh/README.md). Then:
 
-<img src="docs/thought-map-four-en.png" alt="Four Thought Map exports showing a deep single thread, five explored branches, a three-week investigation and a literature review season" width="100%"/>
+1. Open a real session and select **思维图** in its header.
+2. Right-click empty canvas space to **添加空卡片** or **添加已有会话**. Existing sessions are selected through their workspace.
+3. Right-click a card and select **在此节点开始会话**. An empty card asks for a workspace and confirmation; cancelling creates nothing. A bound card opens its existing session.
+4. Drag from a source card's bottom handle to the receiver's top handle, or choose **连接到节点**. Confirm the completed reply and fixed source version before creating a reference.
+5. Continue in the real conversation. The plugin prepares valid incoming references, preserves the draft and attachments, and leaves sending to you.
 
-## More ways to run
+| Right-click location | Available actions |
+|---|---|
+| Empty canvas | Add an empty card or existing session; arrange by sources; fit the graph; associate an existing object; explicitly import the current target's existing references. |
+| Card | Start/open its real session; preview its source; connect to another card; rename; remove. |
+| Edge | Inspect the fixed source and reading positions; confirm a pending connection's source; remove the edge. |
 
-### Run from source
+Touch devices can use the card's **⋯** button and **画布更多操作**. Keyboard access includes **Shift+F10**, arrow keys, **Escape**, and **Delete/Backspace** for selected items. Removal uses the same reference-revocation operation across entry points.
 
-```bash
-npm install
-npm run server    # LLM proxy :3001
-npm run dev       # → localhost:5173
-# No .env? Connect any OpenAI-compatible endpoint inside the app
+## Bounded context, disclosed as needed
+
+A reference records a source version and the last completed reply it may read. Later source messages do not expand that boundary. The first send can include the selected reply's question-and-answer turn within the configured budget; earlier authorized history is available through bounded read/search tools as needed. Connecting a source does not insert its complete history into every request.
+
+Use **查看来源** on a card for a read-only preview. If a source has several independent fixed references, choose the range to inspect. Selected text can still become a material card, a reference to another session, or a session sticker.
+
+Use **查看固定来源与读取位置** on an edge to inspect the reading log. **已准备** means delivery is not confirmed; **已返回** records returned ranges; **未交付** records failure. A search hit does not mean the whole source was read, and your own preview does not mean the AI read it. Logs also expose continuation positions, incomplete ranges, budget limits and early-record trimming.
+
+## Delete, archive and recover
+
+- With [Session Sticker Board](https://github.com/linmu115/dsh-session-sticker-board/tree/codex/rc2-session-context-graph), blue markers beside source selections open referenced sessions. Right-click a marker to enter a session or delete one exact reference. Other references at the same selection and ordinary red stickers remain.
+- Removing graph cards or edges revokes affected references. It does not delete real sessions or rewrite existing answers.
+- Archiving a source or target revokes its active references and clears affected pending connections. Its own graph becomes archived; an already open graph becomes read-only and retains unsaved layout for copying to a draft.
+- Restoring a session restores its archived main graph, but does not restore revoked references or cleared connections. A manually deleted graph is not restored by session recovery.
+- Changes are checked on relevant events, panel reopening and window focus; a visible graph also checks every 10 seconds. Conflicts preserve local edits and offer a layout-only recovery draft.
+- If starting a node fails, the panel keeps the service's error and offers **刷新引用并重试开始** or **返回对话检查**. Reference admission is not skipped to force an open or send.
+
+Older graphs retain their original objects during migration. Unconfirmed legacy lines remain metadata, not active context permissions. Explicitly importing existing target references does not create new permissions or revive removed references. See [ownership and migration](dsh/MANAGED.md#主干与迁移).
+
+## Build the DSH plugin
+
+Use Node **22.19+ in the 22.x line, or 24+**, as declared by the [plugin package](dsh/package.json). From this repository:
+
+```sh
+npm ci
+npm run dsh:build
+cd dsh
+npm pack
 ```
 
-Environment variables, local models and connection details → [docs/setup.md](docs/setup.md)
+This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.8.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
 
-### Browser demo
+Local verification:
 
-Want a ten-second look before installing anything? The [hosted demo](https://app.thoughtdag.workers.dev) runs in the browser, and the example canvas needs no key. It is a feature subset: Session Atlas, local session discovery, keyless web search, some direct-connection tools and the subscription bridge are desktop/local-only.
+```sh
+node --experimental-strip-types --test src/maintenance/model.test.mjs src/maintenance/client.test.mjs src/maintenance/sync.test.mjs dsh/tests/managed-host.test.mjs dsh/tests/managed-client.test.mjs
+npm run dsh:build
+```
 
-## 🧪 Research: Why editable context matters
+The latest graph/reference change has 35 passing synthetic tests and a successful TypeScript/build check. See [graph synchronization](docs/changes/2026-09-15-graph-reference-refresh.md), [layout and theme](docs/changes/2026-09-15-vertical-layout-dsh-theme.md), and the [combined lifecycle verification report](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md). Local package and instance verification are separate from public distribution.
 
-### Context Intervention Benchmark · Pilot v2
+## Standalone app
 
-`9 models` · `1,485 test runs` · `$0 in free tiers` · `answers scored by exact match`
+The standalone web/desktop application retains ThoughtDAG's editable question-and-answer canvas, Session Atlas, PDF/file readers, model connections, clipping, export, and local conversation search. Its canvas execution and storage are separate from the managed DSH panel.
 
-Context does not only fade as conversations grow longer. A wrong statement flows into the replies that come after it and undermines the truthfulness of every later conclusion. Our benchmark verified this across nine language models and found the effect to be widespread: deleting the message that introduced the error is often not enough, because the follow-up replies still carry it. Restoring correct answers required cleaning up the affected passage as a whole, or letting the model rewrite it. In one model whose step-by-step thinking we could switch on and off, the minimal cleanup only worked while thinking was on. Managing context, not just accumulating it, decides what a model gets right.
+Run the standalone app from source:
 
-The full report explains the method, the numbers and their statistics, and what this does and does not establish. It does not rank models and does not explain their inner workings; it tests one observable claim: changing what a model sees changes what it answers next.
+```sh
+npm ci
+npm run server    # Model proxy on port 3001
+# In another terminal:
+npm run dev       # Vite app, normally on port 5173
+```
 
-📖 **[Read the first case study](https://chenxiachan.github.io/thoughtdag/stories/context-repair/)** · 📊 **[Methodology and results](https://chenxiachan.github.io/thoughtdag/research/context-repair-pilot-v2/)** · 🗳️ **[Suggest the next model](https://github.com/chenxiachan/thoughtdag/issues/new?template=suggest-next-model.yml)** · 🧪 **[Contribute a run or case](https://github.com/chenxiachan/thoughtdag/issues/new?template=contribute-benchmark.yml)**
+Configure a model in the app or use the documented environment settings. See [setup](docs/setup.md), [features](docs/features.md), [desktop packaging](desktop/package.json), and the [CLI guide](cli/README.md). Build this checkout's CLI with `npm run cli:build`, then run `node cli/dist/thoughtdag.mjs --help`.
 
-## More capabilities
+The [upstream project](https://github.com/chenxiachan/thoughtdag) provides its own standalone releases and product documentation. Those releases do not contain this fork's current DSH integration.
 
-| Capability | What it does |
-|------------|--------------|
-| 📤 Read-only share | One link carries the whole graph: no account, no server storage |
-| 🧭 Staleness & replay | Upstream edits mark the answers they invalidate; replay in dependency order, token estimate first |
-| ✂️ Clipping | Select a passage or drag a rectangle in the reader; it becomes canvas material with page provenance |
-| 🔌 Any model | Per-node pins that follow the line; text-only models read images through their companion text |
-| 🧭 Agent session continuity | Bring sessions from different agents into one map; continue from any node and return the result to the graph. |
-| 🔒 Local-first | Automatic folder backup writes real files; point it at a synced folder for cross-device |
+## Attribution and contribution
 
-Full feature list (60+, grouped by area) → [docs/features.md](docs/features.md)
+ThoughtDAG was created by Xia Chen and its upstream contributors. This fork preserves the standalone application and adds the managed DSH integration. Contributions should distinguish standalone changes from changes to `src/maintenance/` and `dsh/`.
 
-## Models, cost & privacy
-
-Connect a local Ollama or any OpenAI-compatible endpoint. Built-in presets, subscription connections and environment variables are documented in [setup](docs/setup.md).
-
-- **The free model tier covers every feature**; a local Ollama runs fully offline
-- **In the desktop app everything lives on your machine**: canvases, keys, documents; on the web demo, model traffic runs browser-direct and keys never touch the server
-- **PDFs never leave your machine**; only extracted text travels when you ask
-- **Inside DeepSeek Harness, model calls use the harness's own providers and keys**; ThoughtDAG adds no key of its own, and images and link fetches go through the harness's attachment store and bounded fetcher
-- **The backup format stays backward compatible**; Markdown export is the permanent escape hatch
-
-## Contributors
-
-<a href="https://github.com/KehanLiu" title="@KehanLiu"><img src="https://github.com/KehanLiu.png?size=80" width="40" height="40" alt="@KehanLiu" /></a>
-<a href="https://github.com/nasodaengineer" title="@nasodaengineer"><img src="https://github.com/nasodaengineer.png?size=80" width="40" height="40" alt="@nasodaengineer" /></a>
-<a href="https://github.com/hexu321" title="@hexu321"><img src="https://github.com/hexu321.png?size=80" width="40" height="40" alt="@hexu321" /></a>
-<a href="https://github.com/Moya-Doc" title="@Moya-Doc"><img src="https://github.com/Moya-Doc.png?size=80" width="40" height="40" alt="@Moya-Doc" /></a>
-<a href="https://github.com/nanami-0713" title="@nanami-0713"><img src="https://github.com/nanami-0713.png?size=80" width="40" height="40" alt="@nanami-0713" /></a>
-
-Contributions are welcome — start with [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Supporters
-
-With gratitude to **@andreilaiter**, ThoughtDAG's first supporter, and to everyone helping this independent open-source project grow.
-
-<a href="https://buymeacoffee.com/chatchan92"><img src="docs/supporters/support-thoughtdag.svg" alt="Support ThoughtDAG" width="252" /></a>
-
----
-
-<div align="center">
-
-*The graph is acyclic. You are the loop.*
-
-[MIT](./LICENSE) © 2026 Xia Chen · [Roadmap](docs/features.md#roadmap) · [Feedback](https://github.com/chenxiachan/thoughtdag/issues) · [Cite](https://github.com/chenxiachan/thoughtdag#cite-this-repository)
-
-</div>
+[Contributing](CONTRIBUTING.md) · [MIT license](LICENSE) · [Upstream repository](https://github.com/chenxiachan/thoughtdag)
