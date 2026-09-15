@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { FileText, GitBranch, Layers, MessageSquare, MoreHorizontal, Plus, RefreshCw, Save, StickyNote, X } from 'lucide-react'
+import { FileText, GitBranch, HelpCircle, Layers, LoaderCircle, MessageSquare, MoreHorizontal, PanelLeft, Plus, RefreshCw, Save, StickyNote, X } from 'lucide-react'
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow, applyNodeChanges } from '@xyflow/react'
 import type { Connection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport } from '@xyflow/react'
 import { captureFromPreview, managedApi, parentRequest } from './client'
@@ -12,10 +12,11 @@ import { SourceContextPanel } from './SourceContextPanel'
 import { graphReferenceIds, layoutDraft, reconcileGraph } from './sync'
 import '@xyflow/react/dist/style.css'
 import './managed.css'
+import './shell.css'
 
 type CanvasNode = Node<GraphNodeData, 'managed'>
 type Picker = { purpose: 'add' | 'reference' | 'create'; nodeId?: string; capture?: Capture; operationId: string; position?: { x: number; y: number } }
-type Menu = { x: number; y: number; nodeId?: string; edgeId?: string; position?: { x: number; y: number } }
+type Menu = { x: number; y: number; nodeId?: string; edgeId?: string; position?: { x: number; y: number }; returnFocus?: HTMLElement | null }
 type ConnectionDraft = { source: string; target: string; operationId: string; preview: Preview }
 type Bounds = { sourceVersionId: string; sourceAnchorId: string }
 type Cleanup = { nativeSessionId: string; referenceId: string }
@@ -30,7 +31,7 @@ function ManagedNode({ data, selected }: NodeProps<CanvasNode>) {
     <div className="mg-node-heading"><span className="mg-node-kind"><Icon aria-hidden="true" />{NODE_LABELS[data.kind]}</span></div>
     <strong className="mg-node-title">{data.label || '未命名'}</strong>
     <span className="mg-node-hint">{data.kind === 'placeholder' ? '开始会话时选择工作区' : data.logicalSessionId ? '真实会话 · 按需读取来源' : '已保存的来源对象'}</span>
-    <button className="mg-node-more nodrag" data-more="true" aria-label={`${data.label}的更多操作`}><MoreHorizontal className="mg-icon" aria-hidden="true" /></button>
+    <button className="mg-node-more nodrag" data-more="true" aria-haspopup="menu" aria-label={`${data.label || '未命名卡片'}的更多操作`}><MoreHorizontal className="mg-icon" aria-hidden="true" /></button>
     <Handle type="source" position={Position.Bottom} />
   </div>
 }
@@ -73,6 +74,7 @@ export default function ManagedGraphApp() {
   const [status, setStatus] = useState<Status | null>(null), [document, setDocument] = useState<GraphDocument | null>(null), [graph, setGraph] = useState<ManagedGraph>(EMPTY_GRAPH), [title, setTitle] = useState('未绑定主干草稿')
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [shown, setShown] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0), [syncError, setSyncError] = useState(''), [startFailureId, setStartFailureId] = useState<string | null>(null)
   const creations = useRef(new Map<string, { workspaceId: string; identity?: SessionIdentity }>())
   const [currentSession, setCurrentSession] = useState<{ id: string; title?: string } | null>(null)
@@ -90,13 +92,15 @@ export default function ManagedGraphApp() {
   const guard = useRef(createActionGuard()), flow = useRef<ReactFlowInstance<CanvasNode, Edge> | null>(null), previewTicket = useRef(0), presentedNative = useRef<string | null>(null)
   const docRef = useRef(document), graphRef = useRef(graph), dirtyRef = useRef(dirty), titleRef = useRef(title)
   const refreshPending = useRef(true), refreshActive = useRef(false), busyRef = useRef(busy)
+  const menuElement = useRef<HTMLDivElement>(null)
+  const pendingFocusRestore = useRef<(() => void) | null>(null), navToggle = useRef<HTMLButtonElement>(null)
   docRef.current = document; graphRef.current = graph; dirtyRef.current = dirty; titleRef.current = title
   busyRef.current = busy
   const archived = !!graph.archivedAt
   const editable = !!document && !busy && !archived && status?.capabilities.mainGraph === true
   const accept = useCallback((value: GraphDocument) => {
     const body = acceptCanvasBody(value.graph)
-    setDocument(value); setGraph(body); setTitle(value.title); setDirty(false); docRef.current = value; graphRef.current = body; dirtyRef.current = false; titleRef.current = value.title; setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null)
+    setDocument(value); setGraph(body); setTitle(value.title); setDirty(false); docRef.current = value; graphRef.current = body; dirtyRef.current = false; titleRef.current = value.title; setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null); setNavOpen(false)
   }, [])
   const run = useCallback(async (action: () => Promise<void>) => {
     if (!guard.current.begin()) return
@@ -192,11 +196,42 @@ export default function ManagedGraphApp() {
     void run(async () => { const identity = await managedApi.resolveNative(currentSession.id); setCurrentIdentity(identity); await showOwnerLatest.current(identity.logicalSessionId) })
   }, [currentSession, status, shown, busy, run])
   useEffect(() => { const unload = (event: BeforeUnloadEvent) => { if (dirtyRef.current) event.preventDefault() }; window.addEventListener('beforeunload', unload); return () => window.removeEventListener('beforeunload', unload) }, [])
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!menu) return
-    const previous = window.document.activeElement as HTMLElement | null
+    pendingFocusRestore.current?.()
+    const previous = menu.returnFocus ?? window.document.activeElement as HTMLElement | null
     window.document.querySelector<HTMLElement>('[role="menu"] button:not(:disabled)')?.focus()
-    return () => { if (previous?.isConnected) previous.focus() }
+    return () => {
+      if (!previous?.isConnected) return
+      let cancelled = false, frame = 0
+      const deadline = performance.now() + 200
+      const cancel = () => { cancelled = true; window.cancelAnimationFrame(frame); if (pendingFocusRestore.current === cancel) pendingFocusRestore.current = null }
+      const restore = () => {
+        if (cancelled) return
+        const active = window.document.activeElement
+        if (!previous.isConnected || window.document.querySelector('[role="menu"], [role="dialog"]') || (active !== window.document.body && active !== previous)) { cancel(); return }
+        // React Flow briefly hides a node while measuring it. A hidden button ignores focus.
+        if (getComputedStyle(previous).visibility !== 'hidden' && previous.getClientRects().length) previous.focus({ preventScroll: true })
+        if (window.document.activeElement === previous || performance.now() >= deadline) cancel()
+        else frame = window.requestAnimationFrame(restore)
+      }
+      pendingFocusRestore.current = cancel
+      queueMicrotask(restore)
+    }
+  }, [menu])
+  useLayoutEffect(() => () => pendingFocusRestore.current?.(), [])
+  useLayoutEffect(() => {
+    if (!menu) return
+    const place = () => {
+      const element = menuElement.current
+      if (!element) return
+      const bounds = element.getBoundingClientRect()
+      element.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - bounds.width - 8))}px`
+      element.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - bounds.height - 8))}px`
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
   }, [menu])
   const cleanReferences = async (items: Cleanup[]) => {
     let pending = items
@@ -332,7 +367,12 @@ export default function ManagedGraphApp() {
     if (!graphRef.current.nodes.some(node => node.id === id)) change({ ...graphRef.current, nodes: [...graphRef.current.nodes, { id, position: nextPosition(graphRef.current), data: { kind: objectType.kind, label: object.title, namespace: objectType.namespace, objectId: object.objectId, ...(logicalSessionId ? { logicalSessionId } : {}) } }] })
     setShowObjects(false)
   })
-  const openMenu = (event: { preventDefault(): void; clientX: number; clientY: number }, target: Partial<Menu> = {}) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, ...target }) }
+  const openMenu = (event: { preventDefault(): void; clientX: number; clientY: number; target?: EventTarget | null }, target: Partial<Menu> = {}) => {
+    event.preventDefault()
+    const trigger = event.target instanceof Element ? event.target.closest('button') : null
+    const bounds = trigger?.getBoundingClientRect()
+    setMenu({ x: bounds ? bounds.left : event.clientX, y: bounds ? bounds.bottom + 6 : event.clientY, returnFocus: trigger ?? window.document.activeElement as HTMLElement | null, ...target })
+  }
   const align = () => { try { edit(arrangeBySources); setMenu(null) } catch (cause) { setError(errorText(cause)) } }
   const nodes = useMemo<CanvasNode[]>(() => graph.nodes.map(node => ({ ...node, type: 'managed', selected: selectedNodeIds.includes(node.id) })), [graph.nodes, selectedNodeIds])
   const edges = useMemo<Edge[]>(() => graph.edges.map(edge => { const presentation = relationPresentation(edge, relations, confirmedDrafts); return { ...edge, selected: selectedEdgeIds.includes(edge.id), label: presentation.label, markerEnd: { type: MarkerType.ArrowClosed, color: presentation.muted ? 'var(--mg-edge-muted)' : 'var(--mg-accent)' }, style: { stroke: presentation.muted ? 'var(--mg-edge-muted)' : 'var(--mg-accent)', strokeDasharray: presentation.dashed ? '5 4' : undefined, strokeWidth: 1.8 } } }), [graph.edges, relations, confirmedDrafts, selectedEdgeIds])
@@ -347,20 +387,22 @@ export default function ManagedGraphApp() {
   const menuNode = graph.nodes.find(node => node.id === menu?.nodeId), menuEdge = graph.edges.find(edge => edge.id === menu?.edgeId), previewNode = graph.nodes.find(node => node.id === previewNodeId), logEdge = graph.edges.find(edge => edge.id === logEdgeId)
   const activeRelation = relations.find(relation => relation.referenceId === logEdge?.data.relationId), selected = selectedNodeIds.length + selectedEdgeIds.length > 0
   const currentOwner = currentIdentity?.nativeSessionId === currentSession?.id && currentIdentity?.logicalSessionId === graph.ownerSessionId
-  return <div className="mg-app" tabIndex={-1} onPointerDownCapture={event => { if ((event.target as Element).closest('.react-flow__edge')) event.currentTarget.focus() }} onKeyDownCapture={event => {
-    if (event.key === 'Escape') { if (!busy) { setMenu(null); setPicker(null); setConnection(null); setConnectSource(null); setShowObjects(false); setRenameId(null); setPreviewNodeId(null); setLogEdgeId(null); setSourceChoices(null); setContextNodeId(null); previewTicket.current++ } return }
-    if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true],[role=dialog]')) return
+  const closeNavigation = () => { setNavOpen(false); navToggle.current?.focus({ preventScroll: true }) }
+  return <div className="mg-app" data-nav-open={navOpen} data-view-shown={shown} tabIndex={-1} onPointerDownCapture={event => { if ((event.target as Element).closest('.react-flow__edge')) event.currentTarget.focus() }} onKeyDownCapture={event => {
+    if (event.key === 'Escape') { if (navOpen) closeNavigation(); if (!busy) { setMenu(null); setPicker(null); setConnection(null); setConnectSource(null); setShowObjects(false); setRenameId(null); setPreviewNodeId(null); setLogEdgeId(null); setSourceChoices(null); setContextNodeId(null); previewTicket.current++ } return }
+    if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true],[role=dialog],[role=menu]')) return
     if ((event.key === 'Delete' || event.key === 'Backspace') && editable && selected) { event.preventDefault(); void remove(selectedNodeIds, selectedEdgeIds) }
     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); setMenu({ x: window.innerWidth / 2, y: 150, ...(selectedNodeIds[0] ? { nodeId: selectedNodeIds[0] } : selectedEdgeIds[0] ? { edgeId: selectedEdgeIds[0] } : {}) }) }
   }}>
-    <aside className="mg-sidebar"><header><h1><GitBranch className="mg-icon" aria-hidden="true" />会话主干图</h1><p>上下文来源 → 接收会话</p></header>
+    <aside className="mg-sidebar" id="mg-main-navigation" aria-label="主干导航"><header><h1><GitBranch className="mg-icon" aria-hidden="true" />会话主干图</h1><p>上下文来源 → 接收会话</p></header>
       <button className="mg-current-main" disabled={busy || !currentSession || !status?.capabilities.mainGraph} onClick={() => void run(async () => { const identity = await managedApi.resolveNative(currentSession!.id); setCurrentIdentity(identity); await showOwner(identity.logicalSessionId) })}><MessageSquare className="mg-icon" aria-hidden="true" />当前会话的主干</button>
       <button disabled={busy || !status?.capabilities.mainGraph} onClick={() => void createDraft()}><Plus className="mg-icon" aria-hidden="true" />新建未绑定草稿</button>
       <button className="mg-quiet" aria-expanded={library} disabled={busy} onClick={() => { setLibrary(!library); if (!library) void run(() => listCanvases()) }}><Layers className="mg-icon" aria-hidden="true" />已有主干与待归属草稿</button>
       {library && <div className="mg-canvas-list">{canvases.filter(item => !item.deleted).map(item => <button key={item.objectId} className={`mg-canvas-item${document?.objectId === item.objectId ? ' active' : ''}`} aria-current={document?.objectId === item.objectId ? 'page' : undefined} disabled={busy} onClick={() => void run(async () => { await preserveBeforeLeaving(); await loadDocument(await managedApi.canvas(item.objectId)) })}>{item.title}<small>修订 {item.revision}</small></button>)}{canvasCursor && <button disabled={busy} onClick={() => void run(() => listCanvases(canvasCursor))}>加载更多</button>}</div>}
       <p className="mg-sidebar-note">每个接收会话使用自己的主干。图只保存结构、固定来源和读取位置；正文按需读取。</p>
     </aside>
-    <main className="mg-main"><header className="mg-toolbar"><div className="mg-title-group"><input aria-label="主干名称" value={title} disabled={!editable} onChange={event => { setTitle(event.target.value); titleRef.current = event.target.value; setDirty(true); dirtyRef.current = true }} /><span className="mg-save-state" data-dirty={dirty}>{archived ? dirty ? '已归档 · 本地布局未保存' : '已归档 · 只读' : dirty ? '未保存' : document ? `已保存 · 修订 ${document.revision}` : '尚未打开主干'}</span></div><button disabled={!editable} className="mg-primary" onClick={() => void run(async () => { await persist(); setNotice('主干已保存。') })}><Save className="mg-icon" aria-hidden="true" />保存</button><button disabled={!document || busy} onClick={() => void run(async () => { await refreshGraph() })}><RefreshCw className="mg-icon" aria-hidden="true" />刷新主干</button></header>
+    {navOpen && <button className="mg-nav-dismiss" aria-label="关闭主干导航" onClick={closeNavigation} />}
+    <main className="mg-main"><header className="mg-toolbar"><button ref={navToggle} className="mg-nav-toggle" aria-expanded={navOpen} aria-controls="mg-main-navigation" onClick={() => setNavOpen(value => !value)}><PanelLeft className="mg-icon" aria-hidden="true" />主干导航</button><div className="mg-title-group"><input aria-label="主干名称" value={title} disabled={!editable} onChange={event => { setTitle(event.target.value); titleRef.current = event.target.value; setDirty(true); dirtyRef.current = true }} /><span className="mg-save-state" data-dirty={dirty}>{archived ? dirty ? '已归档 · 本地布局未保存' : '已归档 · 只读' : dirty ? '未保存' : document ? `已保存 · 修订 ${document.revision}` : '尚未打开主干'}</span></div><button disabled={!editable} className="mg-primary" onClick={() => void run(async () => { await persist(); setNotice('主干已保存。') })}><Save className="mg-icon" aria-hidden="true" />保存</button><button disabled={!document || busy} onClick={() => void run(async () => { await refreshGraph() })}><RefreshCw className="mg-icon" aria-hidden="true" />刷新主干</button></header>
       {error && <div className="mg-banner mg-error" role="alert">{error}{document && <button disabled={busy} onClick={() => void run(async () => { const old = docRef.current!, current = await managedApi.canvas(old.objectId); await managedApi.save({ expectedRevision: 0, title: `${titleRef.current} · 冲突恢复草稿`, graph: layoutDraft(graphRef.current) }); await loadDocument(current); setNotice('本地布局已另存为未绑定草稿；已载入服务器最新主干。') })}>保留布局副本并重新载入</button>}</div>}
       {startFailureId && <div className="mg-banner"><button disabled={busy || archived || !graph.nodes.some(node => node.id === startFailureId)} onClick={() => { const node = graph.nodes.find(item => item.id === startFailureId); if (node) start(node) }}>刷新引用并重试开始</button><button disabled={busy} onClick={() => window.parent.postMessage({ source: 'dsh-thoughtdag', type: 'td:close' }, window.location.origin)}>返回对话检查</button></div>}
       {archived && <div className="mg-banner mg-warning" role="status">此主干会话已归档，已停止开始会话和编辑。当前布局仍保留；在会话列表恢复后将自动核对状态。{dirty && <button disabled={busy} onClick={() => void run(async () => { await loadDocument(await managedApi.save({ expectedRevision: 0, title: `${titleRef.current} · 布局草稿`, graph: layoutDraft(graphRef.current) })); setNotice('本地布局已另存为未绑定草稿。') })}>另存布局草稿</button>}</div>}
@@ -371,10 +413,19 @@ export default function ManagedGraphApp() {
       {graph.migration?.status === 'needs-review' && <div className="mg-banner mg-warning">旧图待确认归属：{graph.migration.reason || '开始会话时明确绑定目标，原图保留。'}</div>}
       {document ? <><nav className="mg-actions" aria-label="画布操作"><button disabled={!editable} onClick={event => openMenu(event, {})}><MoreHorizontal className="mg-icon" aria-hidden="true" />画布更多操作</button>{selected && <><button disabled={!editable} onClick={event => openMenu(event, selectedNodeIds[0] ? { nodeId: selectedNodeIds[0] } : { edgeId: selectedEdgeIds[0] })}>所选对象更多操作</button><button disabled={!editable} onClick={() => void remove(selectedNodeIds, selectedEdgeIds)}>移除所选对象</button></>}<span>{graph.ownerSessionId ? `主干会话：${graph.nodes.find(node => node.data.logicalSessionId === graph.ownerSessionId)?.data.label ?? graph.ownerSessionId}` : '未绑定 · 首次开始会话时确定主干'} · 拖线确认上下文来源</span></nav>
         <div className="mg-workbench"><div className="mg-flow"><ReactFlow<CanvasNode, Edge> key={document.objectId} onInit={instance => { flow.current = instance }} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={nodesChanged} onEdgesChange={changes => { const selections = changes.filter(change => change.type === 'select'); if (selections.length) setSelectedEdgeIds(old => { const ids = new Set(old); for (const item of selections) { if (item.selected) ids.add(item.id); else ids.delete(item.id) }; return [...ids] }) }} onConnect={onConnect} onNodeClick={(event, node) => { setSelectedNodeIds([node.id]); setSelectedEdgeIds([]); if ((event.target as Element).closest('[data-more]')) openMenu(event, { nodeId: node.id }); else setMenu(null) }} onNodeContextMenu={(event, node) => { setSelectedNodeIds([node.id]); setSelectedEdgeIds([]); openMenu(event, { nodeId: node.id }) }} onEdgeContextMenu={(event, edge) => { setSelectedEdgeIds([edge.id]); setSelectedNodeIds([]); openMenu(event, { edgeId: edge.id }) }} onPaneContextMenu={event => openMenu(event, { position: flow.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) })} onEdgeClick={(_event, edge) => { setSelectedEdgeIds([edge.id]); setSelectedNodeIds([]); setMenu(null) }} onPaneClick={() => { setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null) }} onMoveEnd={saveViewport} defaultViewport={graph.viewport} nodesDraggable={editable} nodesConnectable={editable} deleteKeyCode={null} fitView={!graph.viewport} minZoom={0.15} maxZoom={2} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} ariaLabelConfig={{ 'controls.fitView.ariaLabel': '适合画布', 'controls.zoomIn.ariaLabel': '放大画布', 'controls.zoomOut.ariaLabel': '缩小画布' }}><Background gap={24} size={1} color="var(--mg-line)" /><Controls showInteractive={false} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} /></ReactFlow>
-          {!graph.nodes.length && <div className="mg-canvas-empty"><div className="mg-empty-icon"><GitBranch aria-hidden="true" /></div><strong>右键添加空卡片或已有会话</strong><p>空卡片在开始会话时选择工作区；添加卡片不会创建上下文权限。</p></div>}
-        </div></div></> : <div className="mg-welcome"><div className="mg-empty-icon"><GitBranch aria-hidden="true" /></div><h2>打开当前会话的主干，或创建一份草稿</h2><p>从来源指向接收会话；会话始终在真实会话页进行。</p><button disabled={busy || !status?.capabilities.mainGraph} onClick={() => void createDraft()}><Plus className="mg-icon" aria-hidden="true" />新建未绑定草稿</button></div>}
+          {!graph.nodes.length && <div className="mg-canvas-empty"><div className="mg-empty-icon"><GitBranch aria-hidden="true" /></div><strong>{archived ? '此主干暂无卡片' : '从一张卡片开始整理上下文'}</strong><p>{archived ? '主干已归档，恢复会话后可以继续编辑。' : '可以直接添加，也可以右键画布。空卡片在开始会话时才选择工作区。'}</p>{!archived && <div className="mg-empty-actions"><button disabled={!editable} onClick={() => edit(old => addPlaceholder(old, `placeholder:${crypto.randomUUID()}`))}><Plus className="mg-icon" aria-hidden="true" />添加空卡片</button><button disabled={!editable} onClick={() => setPicker({ purpose: 'add', operationId: crypto.randomUUID() })}><MessageSquare className="mg-icon" aria-hidden="true" />添加已有会话</button></div>}</div>}
+          <div className="mg-canvas-meta"><span className="mg-canvas-count">{graph.nodes.length} 张卡片 · {graph.edges.length} 条连接{selected && ` · 已选 ${selectedNodeIds.length + selectedEdgeIds.length} 项`}</span><details className="mg-canvas-help"><summary><HelpCircle className="mg-icon" aria-hidden="true" />图示与操作</summary><div><strong>上下文从来源流向接收会话</strong><p>下方接线点连接到接收卡片上方。拖线后确认固定来源，再到会话页检查并发送引用。</p><p>右键卡片或连线管理对象，右键空白处添加。触屏可点卡片上的更多按钮。</p><p><kbd>Shift</kbd> + <kbd>F10</kbd> 打开所选对象菜单；<kbd>Esc</kbd> 关闭菜单。</p></div></details></div>
+        </div></div></> : busy ? <div className="mg-welcome mg-loading" role="status"><LoaderCircle className="mg-loading-icon" aria-hidden="true" /><h2>正在打开会话主干…</h2><p>正在读取图结构与引用状态。</p></div> : <div className="mg-welcome"><div className="mg-empty-icon"><GitBranch aria-hidden="true" /></div><h2>打开当前会话的主干，或创建一份草稿</h2><p>从来源指向接收会话；会话始终在真实会话页进行。</p><button disabled={busy || !status?.capabilities.mainGraph} onClick={() => void createDraft()}><Plus className="mg-icon" aria-hidden="true" />新建未绑定草稿</button></div>}
     </main>
-    {menu && <><div className="mg-menu-dismiss" onPointerDown={() => setMenu(null)} onContextMenu={event => { event.preventDefault(); setMenu(null) }} /><div role="menu" className="mg-context-menu" onKeyDown={event => { if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return; event.preventDefault(); const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')); const index = items.indexOf(window.document.activeElement as HTMLButtonElement); items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus() }} style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 268)), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menuNode ? 290 : 260))), maxHeight: window.innerHeight - 24 }}>
+    {menu && <><div className="mg-menu-dismiss" onPointerDown={() => setMenu(null)} onContextMenu={event => { event.preventDefault(); setMenu(null) }} /><div ref={menuElement} role="menu" aria-label={menuNode ? `${menuNode.data.label}的操作` : menuEdge ? '连接操作' : '画布操作'} className="mg-context-menu" onKeyDown={event => {
+      if (event.key === 'Tab') { event.preventDefault(); setMenu(null); return }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+      event.preventDefault()
+      const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+      const index = items.indexOf(window.document.activeElement as HTMLButtonElement)
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : index === -1 ? event.key === 'ArrowDown' ? 0 : items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+      items[next]?.focus()
+    }} style={{ left: menu.x, top: menu.y }}>
       {menuNode ? <><strong>{menuNode.data.label}</strong><button role="menuitem" disabled={busy || archived || !status?.capabilities.sessions} onClick={() => start(menuNode)}>在此节点开始会话</button>{menuNode.data.logicalSessionId && <button role="menuitem" onClick={() => { setMenu(null); void loadPreview(menuNode.id) }}>查看来源</button>}<button role="menuitem" onClick={() => { setContextNodeId(menuNode.id); setMenu(null) }}>管理来源上下文</button><button role="menuitem" disabled={!editable} onClick={() => { setConnectSource(menuNode.id); setMenu(null) }}>连接到节点</button><button role="menuitem" disabled={!editable} onClick={() => { setRenameId(menuNode.id); setRename(menuNode.data.label); setMenu(null) }}>重命名</button><button role="menuitem" className="mg-danger" disabled={!editable} onClick={() => void remove([menuNode.id], [])}>移除卡片</button></> : menuEdge ? <><button role="menuitem" onClick={() => { setLogEdgeId(menuEdge.id); setMenu(null) }}>查看固定来源与读取位置</button>{menuEdge.data.kind === 'pending' && <button role="menuitem" disabled={!editable} onClick={() => void beginConnect(menuEdge.source, menuEdge.target)}>确认此连接的来源</button>}<button role="menuitem" className="mg-danger" disabled={!editable} onClick={() => void remove([], [menuEdge.id])}>移除边</button></> : <><button role="menuitem" disabled={!editable} onClick={() => { edit(old => addPlaceholder(old, `placeholder:${crypto.randomUUID()}`, menu.position)); setMenu(null) }}>添加空卡片</button><button role="menuitem" disabled={!editable} onClick={() => { setPicker({ purpose: 'add', position: menu.position, operationId: crypto.randomUUID() }); setMenu(null) }}>添加已有会话</button><button role="menuitem" disabled={!editable} onClick={align}>按来源排列</button><button role="menuitem" onClick={() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }); setMenu(null) }}>适合画布</button><button role="menuitem" disabled={!editable} onClick={() => { setShowObjects(true); setMenu(null); void run(() => loadObjects()) }}>关联已有对象</button><button role="menuitem" disabled={!editable || !graph.ownerSessionId} onClick={() => { setMenu(null); void run(repairRelations) }}>导入当前目标已有引用（不新建权限）</button></>}
     </div></>}
     {contextNodeId && <Dialog title="选择要管理的来源连接" onClose={() => setContextNodeId(null)}><p>每条引用独立维护授权上限、活动窗口和实际保留材料。</p>{graph.edges.filter(edge => edge.data.relationId && (edge.source === contextNodeId || edge.target === contextNodeId)).map(edge => <button key={edge.id} onClick={() => { setContextNodeId(null); setLogEdgeId(edge.id) }}>{graph.nodes.find(node => node.id === edge.source)?.data.label ?? '来源'} → {graph.nodes.find(node => node.id === edge.target)?.data.label ?? '接收会话'}</button>)}{!graph.edges.some(edge => edge.data.relationId && (edge.source === contextNodeId || edge.target === contextNodeId)) && <p>此卡片没有已绑定的上下文引用。连接确认后才能管理来源。</p>}</Dialog>}

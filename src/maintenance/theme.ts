@@ -21,10 +21,11 @@ export function initDshAppearance(): () => void {
     const tokens: Record<string, string> = {
       '--dsh-bg': read('--dsw-alias-bg-base', '#fff', '#151517'),
       '--dsh-panel': read('--dsw-alias-bg-layer-1', '#fff', '#202022'),
-      '--dsh-sidebar': read('--dsw-alias-bg-module-platform', '#f5f6f7', '#1b1b1d'),
+      '--dsh-sidebar': read('--dsw-specific-sidebar-fill', '#f5f6f7', '#1b1b1d'),
       '--dsh-text': read('--dsw-alias-label-primary', '#0f1115', '#f9fafb'),
       '--dsh-muted': read('--dsw-alias-label-secondary', '#61666b', '#c0c4c9'),
       '--dsh-line': read('--dsw-alias-border-l2', '#0000001a', '#ffffff24'),
+      '--dsh-frame-line': read('--dsw-alias-border-l3', '#0000001a', '#ffffff24'),
       '--dsh-hover': read('--dsw-alias-interactive-bg-hover', '#f5f6f7', '#2b2b2e'),
       '--dsh-accent': read('--dsw-alias-brand-primary-new-colorprimary-new-color', '#4176e6', '#6f9cff'),
       '--dsh-accent-text': '#fff',
@@ -34,9 +35,18 @@ export function initDshAppearance(): () => void {
     const anchor = embedded ? host.document.querySelector('.dsh-td-canvas-switch') : null
     const anchorBox = anchor?.getBoundingClientRect()
     tokens['--dsh-header-inset'] = `${anchorBox && anchorBox.height > 0 ? Math.max(48, anchorBox.bottom + 12) : 48}px`
+    const geometry = (name: string, fallback: number) => {
+      const value = (anchor as HTMLElement | null)?.style?.getPropertyValue(name).trim()
+      return value && /^\d+(?:\.\d+)?px$/.test(value) ? value : `${fallback}px`
+    }
+    tokens['--dsh-left-rail'] = geometry('--dsh-left-rail', window.innerWidth < 760 ? 0 : 232)
+    tokens['--dsh-chrome-height'] = geometry('--dsh-chrome-height', 76)
+    tokens['--dsh-chrome-top'] = geometry('--dsh-chrome-top', 0)
+    tokens['--dsh-title-room'] = geometry('--dsh-title-room', 460)
     for (const [name, value] of Object.entries(tokens)) root.style.setProperty(name, value)
     root.dataset.theme = dark ? 'dark' : 'light'
     root.dataset.dshManaged = 'true'
+    root.dataset.dshCompact = String(parseFloat(tokens['--dsh-left-rail']) < 140)
     root.style.colorScheme = dark ? 'dark' : 'light'
     root.style.background = tokens['--dsh-bg']
     document.body.style.margin = '0'

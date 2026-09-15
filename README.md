@@ -4,7 +4,7 @@
 
 This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.9**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.10**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
 
 ## What the DSH panel does
 
@@ -14,11 +14,13 @@ The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.9**. Thi
 | Real session cards | Existing cards open their native conversation. Empty cards ask for a workspace when you start them, then create and bind a real session. |
 | Context connections | A confirmed connection grants access to a fixed source version through a chosen completed reply. Empty cards and pending connections grant no reading permission. |
 | Vertical layout | Sources appear above the receiver, with top and bottom handles. Existing saved positions and explicit right-click placement remain intact. |
-| Native appearance | Cards, menus, previews and logs follow DSH's light/dark theme, colors and font. The dialog/map switch keeps its position across views. |
+| Native appearance and continuous transitions | Cards, menus, previews and logs follow DSH's theme. Frame borders track the native conversation, including its collapsed rail. The switch stays in place; brief fades reverse smoothly and respect reduced motion. |
 | Reading transparency | An edge opens its fixed source boundary and disclosure log: returned ranges, delivery status, continuation position, limits and truncation. |
 | Reference and archive sync | Deleting a blue source reference or archiving a session updates the authoritative graph. Refresh preserves unsaved layout edits while applying reference removals. |
 
 The panel uses Maintenance for session identity, graph storage and fixed source access, and Annotation Core for reference preparation. The embedded view has no persistent chat composer, does not keep a second copy of native conversation history, and does not run its own model requests.
+
+Empty canvases offer direct card actions and workspace-first session selection. On-demand canvas help explains flow direction and keyboard controls; compact navigation opens in a drawer. Switching reuses the existing iframe and ends its transition work when settled. See the [alignment and transition report](docs/changes/2026-09-15-aligned-fluid-graph-ui.md).
 
 ## Quick start in DSH
 
@@ -72,7 +74,7 @@ cd dsh
 npm pack
 ```
 
-This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.9.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
+This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.10.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
 
 Local verification:
 

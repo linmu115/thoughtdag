@@ -9,14 +9,14 @@ function fixture(prepare = async () => ({ preparedCount: 1 })) {
   const addEventListener = (type, callback) => { if (!events.has(type)) events.set(type, new Set()); events.get(type).add(callback) }
   const removeEventListener = (type, callback) => events.get(type)?.delete(callback)
   const dispatch = (type, event = {}) => { for (const fn of events.get(type) ?? []) fn(event) }
-  const element = () => ({ style: {}, remove() {}, append() {}, addEventListener() {}, querySelectorAll: () => [] })
+  const element = () => ({ style: {}, remove() {}, append() {}, addEventListener() {}, removeEventListener() {}, querySelectorAll: () => [], children: [] })
   const frameWindow = { postMessage: message => messages.push(message) }, frame = { ...element(), contentWindow: frameWindow }
   const overlay = element(), canvasSwitch = element()
   const host = { ...element(), querySelector: selector => selector === 'iframe' ? frame : selector === '.dsh-td-overlay' ? overlay : canvasSwitch }
   const document = { body: element(), head: element(), createElement: tag => tag === 'div' ? host : element(), querySelectorAll: () => [], querySelector: () => null }
   const origin = 'http://127.0.0.1:9000'
   let module, onSessionChange, dispose
-  const window = { addEventListener, removeEventListener, setTimeout, __ModuleLoader__: { load: input => { module = input.factory(() => ({})) } } }
+  const window = { addEventListener, removeEventListener, setTimeout, clearTimeout, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), __ModuleLoader__: { load: input => { module = input.factory(() => ({})) } } }
   runInNewContext(source, { window, document, location: { origin }, ResizeObserver: class { disconnect() {} observe() {} }, AbortSignal, Error, URLSearchParams, fetch: async url => ({ ok: true, json: async () => url.endsWith('/version') ? { version: 'fixture' } : { nativeSessionId: 'native-target', logicalSessionId: 'logical-target' } }) })
   const ctx = {
     sessions: { list: { getSnapshot: () => ({ current: 'native-target', byId: { 'native-target': { displayTitle: 'Target' } } }), subscribe: fn => { onSessionChange = fn; return () => calls.push(['unsubscribe']) } }, refresh: async () => calls.push(['refresh']), open: async id => calls.push(['open', id]) },

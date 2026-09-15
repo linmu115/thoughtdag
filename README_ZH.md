@@ -4,7 +4,7 @@
 
 本分支为 **DeepSeek Harness 0.1.5-rc.2** 增加每个会话自己的上下文主干图。从会话标题栏的 **对话 / 思维图** 切换视图，在图上整理来源，再回到真实 DSH 会话继续工作。仓库中的独立 ThoughtDAG 应用仍单独保留。
 
-当前 DSH 插件源码版本为 **`dsh-thoughtdag` 0.4.14-rc2.8**。这是定制 RC2 接入版；版本号对应当前代码和已在本地验证的包，不表示同名 npm 包或公网下载附件已经发布。上游插件包不包含本分支的这些修改。
+当前 DSH 插件源码版本为 **`dsh-thoughtdag` 0.4.14-rc2.10**。这是定制 RC2 接入版；版本号对应当前代码和已在本地验证的包，不表示同名 npm 包或公网下载附件已经发布。上游插件包不包含本分支的这些修改。
 
 ## DSH 面板的功能
 
@@ -14,11 +14,13 @@
 | 真实会话卡片 | 已有卡片打开原生会话；空卡片在开始时选择工作区，确认后创建并绑定真实会话。 |
 | 上下文连线 | 确认来源后，连接记录固定源版本与允许读取的已完成回复上限。空卡片和待绑定连线不授予读取权限。 |
 | 上下布局 | 来源在上、接收方在下，连接点分布在卡片上下。同链竖向对齐；已保存位置、手动位置和右键落点保留。 |
-| DSH 原生主题 | 卡片、菜单、预览、日志与明暗主题、配色、字体同步；对话/思维图切换时按钮位置自然衔接。 |
+| DSH 原生主题与连续切换 | 卡片、菜单、预览和日志跟随明暗主题、配色、字体；主横线与左竖线跟随会话页，保留折叠侧栏的宽度。开关原位不动，短暂淡入淡出支持连续反向切换及减少动画设置。 |
 | 读取位置可见 | 从边查看固定截止、实际返回范围、交付状态、继续位置、预算和截断情况。 |
 | 删除与归档同步 | 删除来源蓝色引用或归档会话后，主干按权威记录更新；同步保留本地未保存的布局修改。 |
 
 面板通过 Maintenance 解析会话身份、保存图结构和读取固定来源，通过 Annotation Core 准备引用。嵌入模式没有常驻问答框，不保存第二份原生会话历史，也不使用独立模型代理来回答。
+
+空画布可以直接添加空卡片或按工作区选择已有会话。右下角的“图示与操作”按需解释上下文方向和键盘操作；侧栏折叠时通过“主干导航”打开抽屉。切换复用同一画布页面，不重新挂载，也不在空闲时持续播放切换动画。见[边界对齐与连续动效](docs/changes/2026-09-15-aligned-fluid-graph-ui.md)。
 
 ## 原生 Agent 上下文管理
 
@@ -91,7 +93,7 @@ node --experimental-strip-types --test src/maintenance/model.test.mjs src/mainte
 npm run dsh:build
 ```
 
-本轮图与引用改动有 35 项合成测试通过，并通过类型检查和构建。可查阅 [引用同步记录](docs/changes/2026-09-15-graph-reference-refresh.md)、[布局与主题记录](docs/changes/2026-09-15-vertical-layout-dsh-theme.md)及 [整组生命周期验收报告](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md)。本地包和实例验收与公网发布是不同步骤。
+本次边界对齐与动效的验证见[对应记录](docs/changes/2026-09-15-aligned-fluid-graph-ui.md)。此前图与引用阶段有 35 项合成测试通过，并通过类型检查和构建。可查阅 [引用同步记录](docs/changes/2026-09-15-graph-reference-refresh.md)、[布局与主题记录](docs/changes/2026-09-15-vertical-layout-dsh-theme.md)及 [整组生命周期验收报告](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md)。本地包和实例验收与公网发布是不同步骤。
 
 ## 独立应用
 

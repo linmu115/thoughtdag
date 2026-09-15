@@ -31,7 +31,20 @@ window.__ModuleLoader__.load({
       }
 
       const style = document.createElement('style')
-      style.textContent = '.dsh-td-switch{display:inline-flex;gap:2px;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}.dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap}.dsh-td-switch button:hover{background:var(--dsw-alias-bg-multi-select,#f5f6f7);color:var(--dsw-alias-label-primary,#0f1115)}.dsh-td-switch button.active{background:var(--dsw-alias-label-primary,#0f1115);color:var(--dsw-alias-label-primary-inverted,#fff)}.dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}.dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}.dsh-td-overlay{position:fixed;z-index:100;inset:0;background:var(--dsw-alias-bg-base,#fff)}.dsh-td-overlay[hidden]{display:none}.dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}'
+      style.textContent = `
+        .dsh-td-switch{display:inline-flex;gap:2px;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}
+        .dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:background-color 160ms ease,color 160ms ease}
+        .dsh-td-switch button:hover{background:var(--dsw-alias-bg-multi-select,#f5f6f7);color:var(--dsw-alias-label-primary,#0f1115)}
+        .dsh-td-switch button.active{background:var(--dsw-alias-label-primary,#0f1115);color:var(--dsw-alias-label-primary-inverted,#fff)}
+        .dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}
+        .dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}
+        .dsh-td-overlay{position:fixed;z-index:100;inset:0;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
+        .dsh-td-overlay.is-open{opacity:1;pointer-events:auto}
+        .dsh-td-overlay[data-transitioning]{will-change:opacity}
+        .dsh-td-overlay[hidden]{display:none}
+        .dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}
+        @media(prefers-reduced-motion:reduce){.dsh-td-overlay,.dsh-td-switch button{transition:none}}
+      `
       document.head.append(style)
 
       const overlayHost = document.createElement('div')
@@ -52,17 +65,66 @@ window.__ModuleLoader__.load({
       let mapState = false
       const mapSubscribers = new Set()
       let headerSwitch = null
+      let positionFrame = null
       const positionCanvasSwitch = () => {
+        if (!headerSwitch?.isConnected) {
+          headerSwitch = [...document.querySelectorAll('.dsh-td-header-switch')].find(element => element.getBoundingClientRect().width > 0)
+          positionObserver.disconnect()
+          for (let element = headerSwitch; element && element !== document.body; element = element.parentElement) positionObserver.observe(element)
+        }
         if (!headerSwitch?.isConnected) return
         const { left, top, width, height } = headerSwitch.getBoundingClientRect()
         if (!width || !height) return
-        Object.assign(canvasSwitch.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px' })
+        // The injected switch is inside the native semantic header. Measure its
+        // actual borders, rather than depending on generated CSS module names.
+        const header = headerSwitch.closest('header')
+        const box = header?.getBoundingClientRect()
+        const rail = box?.width > 0 ? Math.max(0, box.left) : 232
+        const bottom = box?.height > 0 ? box.bottom : Math.max(76, top + height + 28)
+        const values = {
+          left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px',
+          '--dsh-left-rail': rail + 'px', '--dsh-chrome-height': bottom + 'px',
+          '--dsh-chrome-top': Math.max(0, box?.top ?? 0) + 'px',
+          '--dsh-title-room': Math.max(0, left - rail - 32) + 'px',
+        }
+        for (const [name, value] of Object.entries(values)) {
+          if (canvasSwitch.style.getPropertyValue(name) !== value) canvasSwitch.style.setProperty(name, value)
+        }
       }
-      const updateCanvasPosition = () => { if (mapState) positionCanvasSwitch() }
+      const updateCanvasPosition = () => {
+        if (!mapState || positionFrame !== null) return
+        positionFrame = window.requestAnimationFrame(() => { positionFrame = null; if (mapState) positionCanvasSwitch() })
+      }
       // Keep the covered header as the layout anchor, including sidebar/viewport changes.
       const positionObserver = new ResizeObserver(updateCanvasPosition)
       window.addEventListener('resize', updateCanvasPosition)
       window.addEventListener('scroll', updateCanvasPosition, true)
+
+      const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+      let transitionTimer = null
+      const blockedRoots = new Map()
+      const blockConversation = block => {
+        if (block) {
+          for (const child of document.body.children) {
+            if (child === overlayHost || !('inert' in child) || blockedRoots.has(child)) continue
+            blockedRoots.set(child, child.inert)
+            child.inert = true
+          }
+        } else {
+          for (const [element, inert] of blockedRoots) element.inert = inert
+          blockedRoots.clear()
+        }
+      }
+      const settleTransition = () => {
+        if (transitionTimer !== null) window.clearTimeout(transitionTimer)
+        transitionTimer = null
+        overlay.removeAttribute('data-transitioning')
+        if (!mapState) overlay.hidden = true
+      }
+      const transitionEnded = event => { if (event.target === overlay && event.propertyName === 'opacity') settleTransition() }
+      overlay.addEventListener('transitionend', transitionEnded)
+      const motionChanged = () => { if (motion.matches) settleTransition() }
+      motion.addEventListener('change', motionChanged)
 
       const send = (type, payload) => frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin)
       const graphJson = async path => {
@@ -153,7 +215,7 @@ window.__ModuleLoader__.load({
         send('td:current-session', { session })
       }
       const referencesChanged = () => send('td:graph-changed', {})
-      const sessionsChanged = () => { syncCurrent(); referencesChanged() }
+      const sessionsChanged = () => { syncCurrent(); referencesChanged(); updateCanvasPosition() }
       window.addEventListener('dsh-session-references-changed', referencesChanged)
       window.addEventListener('focus', referencesChanged)
       const stopSessionChanges = ctx.sessions.list.subscribe?.(sessionsChanged)
@@ -168,22 +230,42 @@ window.__ModuleLoader__.load({
           for (let element = headerSwitch; element && element !== document.body; element = element.parentElement) positionObserver.observe(element)
         }
         mapState = map
-        overlay.hidden = !map
+        if (transitionTimer !== null) window.clearTimeout(transitionTimer)
+        if (map) {
+          overlay.hidden = false
+          overlay.inert = false
+          // Commit the starting opacity once. CSS reverses an in-flight fade
+          // from its current value; no frame loop or queued animations needed.
+          void window.getComputedStyle(overlay).opacity
+        }
+        overlay.classList.toggle('is-open', map)
+        overlay.inert = !map
+        blockConversation(map)
+        if (motion.matches) settleTransition()
+        else {
+          overlay.setAttribute('data-transitioning', '')
+          transitionTimer = window.setTimeout(settleTransition, 220)
+        }
         for (const button of canvasButtons) {
           const active = (button.dataset.view === 'map') === map
           button.classList.toggle('active', active)
           button.setAttribute('aria-pressed', String(active))
         }
         for (const notify of mapSubscribers) notify(map)
-        if (!map) { send('td:view', { shown: false }); return }
+        if (!map) {
+          send('td:view', { shown: false })
+          headerSwitch?.querySelector('[data-view="dialog"]')?.focus({ preventScroll: true })
+          return
+        }
+        canvasSwitch.querySelector('[data-view="map"]')?.focus({ preventScroll: true })
         // the SPA boots on first open, never while hidden: a canvas that
         // measures itself inside a display:none frame fits its view to a 0×0
         // box and shows nothing when revealed
         if (!frame.src) frame.src = frame.dataset.src + (pluginVersion ? (frame.dataset.src.includes('?') ? '&' : '?') + 'dv=' + encodeURIComponent(pluginVersion) : '')
         syncCurrent()
         send('td:view', { shown: true })
-        // let the SPA boot, then re-sync so its listener is ready
-        window.setTimeout(() => { syncCurrent(); send('td:view', { shown: true }) }, 400)
+        // The child's ready handshake below replays the latest state after
+        // first boot. A delayed unconditional "shown" could reopen a closed view.
       }
 
       const Switch = () => {
@@ -227,7 +309,7 @@ window.__ModuleLoader__.load({
           return
         }
         if (event.data.type === 'td:close') return setMap(false)
-        if (event.data.type === 'td:request-current') return syncCurrent()
+        if (event.data.type === 'td:request-current') { syncCurrent(); send('td:view', { shown: mapState }); return }
         // the canvas forked or continued a session: stage it and go back to the
         // chat, which now shows exactly the context the canvas produced
         if (event.data.type === 'td:select-session' && typeof event.data.session === 'string') {
@@ -248,6 +330,11 @@ window.__ModuleLoader__.load({
         window.removeEventListener('resize', updateCanvasPosition)
         window.removeEventListener('scroll', updateCanvasPosition, true)
         positionObserver.disconnect()
+        if (positionFrame !== null) window.cancelAnimationFrame(positionFrame)
+        if (transitionTimer !== null) window.clearTimeout(transitionTimer)
+        motion.removeEventListener('change', motionChanged)
+        overlay.removeEventListener('transitionend', transitionEnded)
+        blockConversation(false)
         overlayHost.remove(); style.remove(); mapSubscribers.clear()
       }, 'thoughtdag: client lifetime')
     }

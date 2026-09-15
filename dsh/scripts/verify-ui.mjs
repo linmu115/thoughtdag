@@ -62,9 +62,17 @@ const knowledge = { dispatch: async (operation, input) => {
   throw new Error('unexpected operation')
 } }
 await apply({ get: name => ({ maintenanceGraph: graph, maintenanceExtensionData: { bridge }, maintenanceSessionContext: { protocolVersion: 1 }, maintenanceKnowledge: knowledge })[name], sessions: new Map(), sessionController: {}, webServer: { register: route => { routes.push(route); return () => {} } }, effect: fn => fn(), logger: { info() {} } })
-const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>#toolbar{margin:12px 0 0 18vw;width:max-content}</style></head><body><div id="toolbar"></div><script>
+const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#111)}
+:root{--fixture-sidebar:320px;--fixture-header-height:76px}#fixture-layout{height:100vh;display:grid;grid-template-columns:var(--fixture-sidebar) minmax(0,1fr)}
+#fixture-nav{border-right:.5px solid #ddd;background:#f8f9fa;padding:24px;overflow:hidden}#fixture-main{min-width:0}
+#fixture-header{height:var(--fixture-header-height);padding:10px 20px 0;border-bottom:.5px solid #ddd}
+#fixture-title-row{display:flex;align-items:center;gap:10px;min-height:30px}#fixture-title{width:160px;flex-shrink:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#toolbar{width:max-content;flex:none}
+#fixture-tabs{margin-top:10px}#fixture-content{padding:24px}textarea{display:block;width:90%;margin-top:24px}
+@media(max-width:760px){:root{--fixture-sidebar:0px}#fixture-nav{padding:0;visibility:hidden}#fixture-title{width:100px}}
+</style></head><body><div id="fixture-layout"><aside id="fixture-nav">会话工作区</aside><main id="fixture-main"><header id="fixture-header"><div id="fixture-title-row"><span id="fixture-title">来源讨论 X</span><div id="toolbar"></div></div><div id="fixture-tabs">对话　轨迹</div></header><section id="fixture-content">完整会话页<textarea aria-label="合成草稿">保留原有草稿</textarea></section></main></div><script>
 window.fixture={current:'native-source',draft:'保留原有草稿',attachments:['保留附件'],actions:[]};
-const sessions={list:{getSnapshot:()=>({current:fixture.current,byId:{[fixture.current]:{displayTitle:fixture.current}}})},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})}};
+const sessions={list:{getSnapshot:()=>({current:fixture.current,byId:{[fixture.current]:{displayTitle:fixture.current}}}),subscribe:fn=>{fixture.onSessionsChanged=fn;return()=>{fixture.onSessionsChanged=null}}},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})}};
 const core={features:['graph-reference-actions-v1','session-main-graph-v2'],prepareGraphReferences:async(target,referenceIds)=>{fixture.actions.push({operation:'prepare',target,referenceIds});return{preparedCount:referenceIds.length}},addCrossSessionReference:async(target,capture,options)=>{const r=await fetch('/fixture/reference',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target,capture,options})});fixture.current=target;fixture.actions.push({operation:'reference',target,capture});return r.json()},resolveReferenceLink:async(target,referenceId)=>({setId:'set',referenceId,state:'pending'}),deleteReferenceLink:async(target,setId,referenceId)=>{fixture.actions.push({operation:'delete-reference',target,referenceId});return{deleted:true}}};
 const react={useState:value=>[value,()=>{}],useEffect:fn=>fn(),createElement:(tag,props,...children)=>{const el=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='onClick')el.onclick=v;else if(k==='className')el.className=v;else if(v!==undefined)el.setAttribute(k,v)}for(const c of children.flat())el.append(c instanceof Node?c:String(c));return el}};
 window.__ModuleLoader__={load:mod=>mod.factory(()=>react).apply({sessions,get:name=>name==='annotationCore'?core:undefined,effect:fn=>fn(),slots:{inject:(_name,fn)=>fn(),register:(_meta,C)=>{document.querySelector('#toolbar').append(C());return()=>{}}}})};
@@ -90,13 +98,85 @@ const browser = await chromium.launch({ executablePath: process.env.TEST_BROWSER
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } }), errors = [], checks = []
 page.on('pageerror', error => errors.push(error.message))
 const app = page.frameLocator('iframe')
-const toggleMap = async () => { if (!(await page.locator('.dsh-td-overlay').isVisible())) await page.getByRole('button', { name: '思维图', exact: true }).click(); await app.getByRole('button', { name: '画布更多操作', exact: true }).waitFor() }
+const toggleMap = async () => { if (!(await page.locator('.dsh-td-overlay').evaluate(el => el.classList.contains('is-open')))) await page.locator('.dsh-td-header-switch [data-view=map]').click(); await app.getByRole('button', { name: '画布更多操作', exact: true }).waitFor() }
 const menu = async () => { await app.getByRole('button', { name: '画布更多操作', exact: true }).click() }
 const nodeMenu = async label => { await app.getByRole('button', { name: label + '的更多操作', exact: true }).click() }
 const addSession = async label => { await menu(); await app.getByRole('menuitem', { name: '添加已有会话', exact: true }).click(); await app.getByRole('button', { name: '合成测试工作区', exact: false }).click(); await app.getByRole('button', { name: label, exact: false }).click() }
 try {
   await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort())
   await page.goto(origin); await toggleMap(); await app.getByText('来源讨论 X', { exact: true }).waitFor()
+  const alignment = async label => {
+    await page.waitForFunction(() => {
+      const host = document.querySelector('#fixture-header').getBoundingClientRect(), doc = document.querySelector('iframe').contentDocument
+      const main = doc.querySelector('.mg-main'), chrome = doc.querySelector('.mg-toolbar')
+      if (!chrome) return false
+      return host.width > 200 && Math.abs(main.getBoundingClientRect().left - host.left) < .75 && Math.abs(chrome.getBoundingClientRect().bottom - host.bottom) < .75
+    })
+    const header = await page.locator('.dsh-td-header-switch').boundingBox(), canvas = await page.locator('.dsh-td-canvas-switch').boundingBox()
+    for (const axis of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(header[axis] - canvas[axis]) < .75, label + ': switch ' + axis)
+    checks.push(label)
+  }
+  await alignment('desktop frame borders and stationary switch match the native conversation header')
+  await page.screenshot({ path: resolve(output, 'aligned-light.png'), animations: 'disabled' })
+  await page.evaluate(() => { document.documentElement.style.setProperty('--fixture-sidebar', '280px'); document.documentElement.style.setProperty('--fixture-header-height', '96px') })
+  await alignment('frame follows sidebar resizing and native header height changes')
+  await page.evaluate(() => { document.documentElement.style.setProperty('--fixture-sidebar', '56px') })
+  await alignment('native collapsed 56px rail is retained instead of shifting canvas left to zero')
+  await app.getByRole('button', { name: '主干导航', exact: true }).click()
+  await alignment('opening compact navigation does not move the main canvas border')
+  await page.keyboard.press('Escape')
+  await page.evaluate(() => { document.documentElement.style.removeProperty('--fixture-sidebar'); document.documentElement.style.removeProperty('--fixture-header-height') })
+  await alignment('restored host frame stays aligned')
+  const oldSwitchX = (await page.locator('.dsh-td-canvas-switch').boundingBox()).x
+  await page.evaluate(() => { document.querySelector('#fixture-title').style.width = '210px'; fixture.onSessionsChanged() })
+  await page.waitForFunction(old => document.querySelector('.dsh-td-canvas-switch').getBoundingClientRect().left > old + 40, oldSwitchX)
+  await alignment('title metadata changes reposition the switch without a window resize')
+  await page.waitForFunction(() => !document.querySelector('.dsh-td-overlay').hasAttribute('data-transitioning'))
+  const rapid = await page.evaluate(async () => {
+    const frame = document.querySelector('iframe'), overlay = document.querySelector('.dsh-td-overlay'), native = document.querySelector('#fixture-layout')
+    const before = frame.contentWindow.document
+    const samples = []
+    for (let n = 0; n < 5; n++) {
+      overlay.querySelector('[data-view=dialog]').click()
+      await new Promise(r => setTimeout(r, 45))
+      samples.push(Number(getComputedStyle(overlay).opacity))
+      document.querySelector('.dsh-td-header-switch [data-view=map]').click()
+      await new Promise(r => setTimeout(r, 45))
+    }
+    const reused = before === frame.contentWindow.document
+    overlay.querySelector('[data-view=dialog]').click()
+    await new Promise(r => setTimeout(r, 500))
+    return { samples, reused, hidden: overlay.hidden, inert: overlay.inert, underlayRestored: !native.inert,
+      viewHidden: frame.contentDocument.querySelector('.mg-app').dataset.viewShown === 'false',
+      transientLayerRemoved: !overlay.hasAttribute('data-transitioning'), focusRestored: document.activeElement?.dataset.view === 'dialog', draft: document.querySelector('textarea').value }
+  })
+  assert.ok(rapid.samples.every(value => value > 0 && value < 1), 'normal motion must include intermediate opacity')
+  assert.equal(rapid.reused, true); assert.equal(rapid.hidden, true); assert.equal(rapid.inert, true); assert.equal(rapid.underlayRestored, true); assert.equal(rapid.viewHidden, true); assert.equal(rapid.transientLayerRemoved, true); assert.equal(rapid.focusRestored, true); assert.equal(rapid.draft, '保留原有草稿')
+  checks.push('continuous reversal reuses the iframe, settles closed, restores focus scope and never reopens from a delayed timer')
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await toggleMap()
+  assert.equal(await page.locator('.dsh-td-overlay').evaluate(el => getComputedStyle(el).transitionDuration), '0s')
+  await page.locator('.dsh-td-canvas-switch [data-view=dialog]').click()
+  assert.equal(await page.locator('.dsh-td-overlay').evaluate(el => el.hidden), true)
+  checks.push('reduced motion disables transitions and closes immediately')
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await toggleMap()
+  await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', ''); document.body.style.setProperty('--dsw-alias-bg-base', '#151517'); document.body.style.setProperty('--dsw-alias-label-primary', '#f5f5f7'); document.body.style.setProperty('--dsw-alias-label-primary-inverted', 'rgb(53, 54, 56)'); document.body.style.setProperty('--dsw-alias-label-secondary', 'rgb(207, 211, 214)'); document.body.style.setProperty('--dsw-alias-border-l3', '#ffffff24') })
+  await app.locator('html').evaluate(el => new Promise(resolve => { const check = () => el.dataset.theme === 'dark' ? resolve() : requestAnimationFrame(check); check() }))
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.dsh-td-canvas-switch button.active')).color === 'rgb(53, 54, 56)')
+  const darkSwitchContrast = await page.locator('.dsh-td-canvas-switch').evaluate(el => {
+    const luminance = value => {
+      const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+      return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722
+    }
+    return [...el.querySelectorAll('button')].map(button => {
+      const style = getComputedStyle(button), foreground = luminance(style.color)
+      const background = luminance(button.classList.contains('active') ? style.backgroundColor : getComputedStyle(el).backgroundColor)
+      return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05)
+    })
+  })
+  assert.ok(darkSwitchContrast.every(value => value >= 4.5), 'official dark inverse and secondary tokens keep both switch labels readable')
+  await alignment('dark host theme preserves frame alignment and readable switch contrast')
+  await page.screenshot({ path: resolve(output, 'aligned-dark.png'), animations: 'disabled' })
+  await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme'); document.body.style.cssText = '' })
   assert.equal(refs.length, 0); assert.equal(previews.length, 0); assert.equal(calls.filter(c => c[0] === 'ensure').length, 1)
   assert.equal(await app.getByText('全局维护网络', { exact: true }).count(), 0); assert.equal(await app.getByText('局部问答', { exact: false }).count(), 0)
   checks.push('opening a graph creates only the current owner main graph; removed global UI and preview panel stay absent')
@@ -125,6 +205,6 @@ try {
   await menu(); await app.getByRole('menuitem', { name: '添加空卡片', exact: true }).click(); conflictNext = true; await app.getByRole('button', { name: '保存', exact: true }).click(); await app.getByText('修订冲突，本地编辑保留', { exact: false }).waitFor(); assert.equal(await app.getByRole('button', { name: '新会话的更多操作', exact: true }).count(), 1)
   await app.getByRole('button', { name: '保留布局副本并重新载入', exact: true }).click(); await app.getByText('本地布局已另存', { exact: false }).waitFor()
   checks.push('node context deletion retains real session; revision conflict preserves local layout and supports a separate recovery draft')
-  await page.setViewportSize({ width: 390, height: 844 }); await menu(); await page.screenshot({ path: resolve(output, 'mobile-menu.png') }); const bounds = await app.getByRole('menu').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391); assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 845); await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 390, height: 844 }); await alignment('narrow host aligns both frame edges and keeps view switch fixed'); await app.getByRole('button', { name: '主干导航', exact: true }).click(); await app.getByRole('button', { name: '当前会话的主干', exact: true }).waitFor(); await page.screenshot({ path: resolve(output, 'mobile-navigation.png'), animations: 'disabled' }); await page.keyboard.press('Escape'); await menu(); await page.screenshot({ path: resolve(output, 'mobile-menu.png'), animations: 'disabled' }); const bounds = await app.getByRole('menu').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391); assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 845); await page.keyboard.press('Escape')
   assert.deepEqual(errors, []); await writeFile(resolve(output, 'result.json'), JSON.stringify({ userData: false, modelCalls: 0, checks, errors, references: refs.map(r => ({ referenceId: r.referenceId, state: r.state })), nativeCreates: created.size }, null, 2)); console.log(JSON.stringify({ output, checks: checks.length, errors }))
 } catch (error) { await page.screenshot({ path: resolve(output, 'failure.png') }); await writeFile(resolve(output, 'failure.txt'), error.stack + '\n' + JSON.stringify({calls,refs,previews,checks,errors})); throw error } finally { await browser.close(); server.close(); await once(server, 'close') }
