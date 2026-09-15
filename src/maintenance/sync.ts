@@ -13,7 +13,7 @@ export function reconcileGraph(base: ManagedGraph, local: ManagedGraph, remote: 
     return {
       ...node,
       position: equal(before.position, edited.position) ? node.position : edited.position,
-      data: { ...node.data, ...(before.data.label !== edited.data.label ? { label: edited.data.label } : {}) },
+      data: { ...node.data, ...(node.data.kind !== 'session' && before.data.label !== edited.data.label ? { label: edited.data.label } : {}) },
     }
   })
   const ids = new Set(nodes.map(node => node.id))

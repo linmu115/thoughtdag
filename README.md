@@ -1,10 +1,12 @@
 # ThoughtDAG · DSH session graph fork
 
+Main graph headings, session cards and the graph list now follow current session names, including existing graphs that cached an ID. Rename sessions in the conversation page; materials and unbound drafts retain their own names. See [name synchronization](docs/changes/2026-09-15-current-session-names.md).
+
 [中文](README_ZH.md) · [DSH installation and use](dsh/README.md) · [Detailed graph guide](dsh/MANAGED.md) · [Standalone app](#standalone-app)
 
 This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.12**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.13**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
 
 
 The view selector now uses a shared sliding thumb with fixed labels, continuous reversal and host theme colors. See [selector behavior and validation](docs/changes/2026-09-15-sliding-view-selector.md).

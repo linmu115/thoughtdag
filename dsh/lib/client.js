@@ -27,7 +27,8 @@ window.__ModuleLoader__.load({
         const id = snapshot.current
         if (id === undefined) return null
         const session = snapshot.byId[id]
-        return session === undefined ? null : { id, title: session.displayTitle ?? null, cwd: session.cwd ?? null }
+        const readable = value => typeof value === 'string' && value.trim() && value.trim() !== id ? value.trim() : null
+        return session === undefined ? null : { id, title: readable(session.title) ?? readable(session.displayTitle), cwd: session.cwd ?? null }
       }
 
       const style = document.createElement('style')

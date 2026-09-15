@@ -6,15 +6,15 @@ const node = (id, y) => ({ id, position: { x: 40, y }, data: { kind: 'session', 
 const edge = (id, source = 'source') => ({ id, source, target: 'owner', data: { kind: 'upstream', namespace: 'annotation-upstream', relationId: id, state: 'sent', sourceVersionId: 'fixed-v1', cutoffEventId: 'reply-1' } })
 const base = () => ({ managedSchema: 2, ownerSessionId: 'owner', nodes: [node('source', 40), node('owner', 300)], edges: [edge('reference')] })
 
-test('remote revoke removes its edge and source while preserving unsaved owner position and title', () => {
+test('remote revoke preserves unsaved position while the session name follows current metadata', () => {
   const before = base(), local = structuredClone(before)
   local.nodes[1].position = { x: 700, y: 800 }; local.nodes[1].data.label = 'My layout'
   local.viewport = { x: 3, y: 4, zoom: 0.8 }
-  const remote = { ...before, nodes: [before.nodes[1]], edges: [], removedRelationIds: ['reference'] }
+  const remote = { ...before, nodes: [{ ...before.nodes[1], data: { ...before.nodes[1].data, label: 'Renamed session' } }], edges: [], removedRelationIds: ['reference'] }
   const merged = reconcileGraph(before, local, remote)
   assert.deepEqual(merged.nodes.map(item => item.id), ['owner'])
   assert.deepEqual(merged.nodes[0].position, { x: 700, y: 800 })
-  assert.equal(merged.nodes[0].data.label, 'My layout')
+  assert.equal(merged.nodes[0].data.label, 'Renamed session')
   assert.deepEqual(merged.viewport, local.viewport)
   assert.deepEqual(merged.edges, [])
   assert.deepEqual(merged.removedRelationIds, ['reference'])
