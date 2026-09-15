@@ -4,7 +4,7 @@
 
 This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.10**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.11**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
 
 ## What the DSH panel does
 
@@ -74,7 +74,7 @@ cd dsh
 npm pack
 ```
 
-This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.10.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
+This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.11.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
 
 Local verification:
 

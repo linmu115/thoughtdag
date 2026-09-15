@@ -75,6 +75,8 @@ export default function ManagedGraphApp() {
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [shown, setShown] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  // Renderer measurements belong to this canvas lifetime, never its stored graph.
+  const [measurements, setMeasurements] = useState<Map<string, { width: number; height: number }>>(() => new Map())
   const [refreshTick, setRefreshTick] = useState(0), [syncError, setSyncError] = useState(''), [startFailureId, setStartFailureId] = useState<string | null>(null)
   const creations = useRef(new Map<string, { workspaceId: string; identity?: SessionIdentity }>())
   const [currentSession, setCurrentSession] = useState<{ id: string; title?: string } | null>(null)
@@ -100,6 +102,7 @@ export default function ManagedGraphApp() {
   const editable = !!document && !busy && !archived && status?.capabilities.mainGraph === true
   const accept = useCallback((value: GraphDocument) => {
     const body = acceptCanvasBody(value.graph)
+    if (docRef.current?.objectId !== value.objectId) setMeasurements(new Map())
     setDocument(value); setGraph(body); setTitle(value.title); setDirty(false); docRef.current = value; graphRef.current = body; dirtyRef.current = false; titleRef.current = value.title; setSelectedNodeIds([]); setSelectedEdgeIds([]); setMenu(null); setNavOpen(false)
   }, [])
   const run = useCallback(async (action: () => Promise<void>) => {
@@ -374,9 +377,21 @@ export default function ManagedGraphApp() {
     setMenu({ x: bounds ? bounds.left : event.clientX, y: bounds ? bounds.bottom + 6 : event.clientY, returnFocus: trigger ?? window.document.activeElement as HTMLElement | null, ...target })
   }
   const align = () => { try { edit(arrangeBySources); setMenu(null) } catch (cause) { setError(errorText(cause)) } }
-  const nodes = useMemo<CanvasNode[]>(() => graph.nodes.map(node => ({ ...node, type: 'managed', selected: selectedNodeIds.includes(node.id) })), [graph.nodes, selectedNodeIds])
+  const nodes = useMemo<CanvasNode[]>(() => graph.nodes.map(node => ({ ...node, type: 'managed', measured: measurements.get(node.id), selected: selectedNodeIds.includes(node.id) })), [graph.nodes, selectedNodeIds, measurements])
   const edges = useMemo<Edge[]>(() => graph.edges.map(edge => { const presentation = relationPresentation(edge, relations, confirmedDrafts); return { ...edge, selected: selectedEdgeIds.includes(edge.id), label: presentation.label, markerEnd: { type: MarkerType.ArrowClosed, color: presentation.muted ? 'var(--mg-edge-muted)' : 'var(--mg-accent)' }, style: { stroke: presentation.muted ? 'var(--mg-edge-muted)' : 'var(--mg-accent)', strokeDasharray: presentation.dashed ? '5 4' : undefined, strokeWidth: 1.8 } } }), [graph.edges, relations, confirmedDrafts, selectedEdgeIds])
   const nodesChanged = (changes: NodeChange<CanvasNode>[]) => {
+    const dimensions = changes.filter(change => change.type === 'dimensions')
+    if (dimensions.length) setMeasurements(old => {
+      const ids = new Set(graphRef.current.nodes.map(node => node.id))
+      const next = new Map([...old].filter(([id]) => ids.has(id)))
+      for (const change of dimensions) {
+        if (!ids.has(change.id) || !change.dimensions) continue
+        const { width, height } = change.dimensions
+        const previous = next.get(change.id)
+        if (previous?.width !== width || previous?.height !== height) next.set(change.id, { width, height })
+      }
+      return next.size === old.size && [...next].every(([id, value]) => old.get(id) === value) ? old : next
+    })
     const selections = changes.filter(change => change.type === 'select')
     if (selections.length) setSelectedNodeIds(old => { const ids = new Set(old); for (const selection of selections) { if (selection.selected) ids.add(selection.id); else ids.delete(selection.id) }; return [...ids] })
     const edits = changes.filter(change => change.type === 'position')
