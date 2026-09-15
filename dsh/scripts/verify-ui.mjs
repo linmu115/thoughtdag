@@ -104,7 +104,39 @@ const nodeMenu = async label => { await app.getByRole('button', { name: label + 
 const addSession = async label => { await menu(); await app.getByRole('menuitem', { name: '添加已有会话', exact: true }).click(); await app.getByRole('button', { name: '合成测试工作区', exact: false }).click(); await app.getByRole('button', { name: label, exact: false }).click() }
 try {
   await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort())
-  await page.goto(origin); await toggleMap(); await app.getByText('来源讨论 X', { exact: true }).waitFor()
+  await page.goto(origin)
+  await toggleMap(); await app.getByText('来源讨论 X', { exact: true }).waitFor()
+  await page.locator('.dsh-td-canvas-switch [data-view=dialog]').click()
+  await page.waitForTimeout(400)
+  const slide = await page.evaluate(async () => {
+    const header = document.querySelector('.dsh-td-header-switch'), canvas = document.querySelector('.dsh-td-canvas-switch')
+    const thumb = el => new DOMMatrixReadOnly(getComputedStyle(el, '::before').transform).m41
+    const box = el => { const { x, y, width, height } = el.getBoundingClientRect(); return { x, y, width, height } }
+    const initialBox = box(header)
+    header.querySelector('[data-view=map]').click()
+    await new Promise(requestAnimationFrame)
+    await new Promise(requestAnimationFrame)
+    await new Promise(r => setTimeout(r, 80))
+    const outgoing = [thumb(header), thumb(canvas)], openBox = box(canvas)
+    canvas.querySelector('[data-view=dialog]').click()
+    const atReverse = thumb(header)
+    await new Promise(r => setTimeout(r, 40))
+    const returning = thumb(header)
+    await new Promise(r => setTimeout(r, 400))
+    const settled = thumb(header)
+    header.querySelector('[data-view=map]').click()
+    await new Promise(r => setTimeout(r, 400))
+    return { initialBox, openBox, outgoing, atReverse, returning, settled, end: thumb(canvas), headerEnd: thumb(header) }
+  })
+  await writeFile(resolve(output, 'selector-motion.json'), JSON.stringify(slide, null, 2))
+  for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(slide.initialBox[key] - slide.openBox[key]) < .75, 'switch stays fixed: ' + key)
+  assert.ok(slide.outgoing.every(x => x > 0 && x < slide.end), 'thumb visibly travels between states')
+  assert.ok(Math.abs(slide.outgoing[0] - slide.outgoing[1]) < 1, 'both surfaces share the animated thumb position')
+  assert.ok(Math.abs(slide.atReverse - slide.outgoing[0]) < 1, 'reversal starts at the current position')
+  assert.ok(slide.returning < slide.atReverse && slide.returning > 0, 'reversal moves continuously toward dialog')
+  assert.equal(slide.settled, 0); assert.equal(slide.headerEnd, slide.end)
+  checks.push('shared sliding thumb stays aligned across surfaces and reverses continuously without moving labels or frame')
+  await toggleMap(); await app.getByText('来源讨论 X', { exact: true }).waitFor()
   const alignment = async label => {
     await page.waitForFunction(() => {
       const host = document.querySelector('#fixture-header').getBoundingClientRect(), doc = document.querySelector('iframe').contentDocument
@@ -155,6 +187,7 @@ try {
   checks.push('continuous reversal reuses the iframe, settles closed, restores focus scope and never reopens from a delayed timer')
   await page.emulateMedia({ reducedMotion: 'reduce' }); await toggleMap()
   assert.equal(await page.locator('.dsh-td-overlay').evaluate(el => getComputedStyle(el).transitionDuration), '0s')
+  assert.equal(await page.locator('.dsh-td-canvas-switch').evaluate(el => getComputedStyle(el, '::before').transitionDuration), '0s')
   await page.locator('.dsh-td-canvas-switch [data-view=dialog]').click()
   assert.equal(await page.locator('.dsh-td-overlay').evaluate(el => el.hidden), true)
   checks.push('reduced motion disables transitions and closes immediately')
@@ -169,7 +202,7 @@ try {
     }
     return [...el.querySelectorAll('button')].map(button => {
       const style = getComputedStyle(button), foreground = luminance(style.color)
-      const background = luminance(button.classList.contains('active') ? style.backgroundColor : getComputedStyle(el).backgroundColor)
+      const background = luminance(button.classList.contains('active') ? getComputedStyle(el, '::before').backgroundColor : getComputedStyle(el).backgroundColor)
       return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05)
     })
   })

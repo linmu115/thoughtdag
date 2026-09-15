@@ -4,7 +4,10 @@
 
 This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.11**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.12**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+
+
+The view selector now uses a shared sliding thumb with fixed labels, continuous reversal and host theme colors. See [selector behavior and validation](docs/changes/2026-09-15-sliding-view-selector.md).
 
 ## What the DSH panel does
 

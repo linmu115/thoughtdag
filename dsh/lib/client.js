@@ -32,10 +32,12 @@ window.__ModuleLoader__.load({
 
       const style = document.createElement('style')
       style.textContent = `
-        .dsh-td-switch{display:inline-flex;gap:2px;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}
-        .dsh-td-switch button{height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:background-color 160ms ease,color 160ms ease}
-        .dsh-td-switch button:hover{background:var(--dsw-alias-bg-multi-select,#f5f6f7);color:var(--dsw-alias-label-primary,#0f1115)}
-        .dsh-td-switch button.active{background:var(--dsw-alias-label-primary,#0f1115);color:var(--dsw-alias-label-primary-inverted,#fff)}
+        .dsh-td-switch{position:relative;isolation:isolate;display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;flex-shrink:0;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}
+        .dsh-td-switch::before{content:"";position:absolute;z-index:-1;inset:3px auto 3px 3px;width:calc((100% - 8px)/2);border-radius:999px;background:var(--dsw-alias-label-primary,#0f1115);transform:translateX(0);transition:transform 320ms cubic-bezier(.22,.8,.25,1);pointer-events:none}
+        .dsh-td-switch[data-view="map"]::before{transform:translateX(calc(100% + 2px))}
+        .dsh-td-switch button{position:relative;height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:color 160ms ease}
+        .dsh-td-switch button:hover{color:var(--dsw-alias-label-primary,#0f1115)}
+        .dsh-td-switch button.active{color:var(--dsw-alias-label-primary-inverted,#fff)}
         .dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}
         .dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}
         .dsh-td-overlay{position:fixed;z-index:100;inset:0;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
@@ -43,12 +45,12 @@ window.__ModuleLoader__.load({
         .dsh-td-overlay[data-transitioning]{will-change:opacity}
         .dsh-td-overlay[hidden]{display:none}
         .dsh-td-overlay iframe{display:block;width:100%;height:100%;border:0}
-        @media(prefers-reduced-motion:reduce){.dsh-td-overlay,.dsh-td-switch button{transition:none}}
+        @media(prefers-reduced-motion:reduce){.dsh-td-overlay,.dsh-td-switch::before,.dsh-td-switch button{transition:none}}
       `
       document.head.append(style)
 
       const overlayHost = document.createElement('div')
-      overlayHost.innerHTML = '<section class="dsh-td-overlay" hidden><div class="dsh-td-switch dsh-td-canvas-switch" role="group" aria-label="view switch"><button type="button" data-view="dialog" aria-pressed="false">对话</button><button type="button" data-view="map" class="active" aria-pressed="true">思维图</button></div><iframe title="ThoughtDAG" data-src="/thoughtdag/"></iframe></section>'
+      overlayHost.innerHTML = '<section class="dsh-td-overlay" hidden><div class="dsh-td-switch dsh-td-canvas-switch" data-view="dialog" role="group" aria-label="view switch"><button type="button" data-view="dialog" class="active" aria-pressed="true">对话</button><button type="button" data-view="map" aria-pressed="false">思维图</button></div><iframe title="ThoughtDAG" data-src="/thoughtdag/"></iframe></section>'
       document.body.append(overlayHost)
       const overlay = overlayHost.querySelector('.dsh-td-overlay')
       const frame = overlayHost.querySelector('iframe')
@@ -237,6 +239,18 @@ window.__ModuleLoader__.load({
           // Commit the starting opacity once. CSS reverses an in-flight fade
           // from its current value; no frame loop or queued animations needed.
           void window.getComputedStyle(overlay).opacity
+          void window.getComputedStyle(canvasSwitch, '::before').transform
+        }
+        // Both copies share one target, so swapping surfaces does not restart
+        // the thumb. CSS reverses interrupted motion from its current position.
+        for (const selector of [headerSwitch, canvasSwitch]) {
+          if (!selector) continue
+          selector.dataset.view = map ? 'map' : 'dialog'
+          for (const button of selector.querySelectorAll('button')) {
+            const active = (button.dataset.view === 'map') === map
+            button.classList.toggle('active', active)
+            button.setAttribute('aria-pressed', String(active))
+          }
         }
         overlay.classList.toggle('is-open', map)
         overlay.inert = !map
@@ -245,11 +259,6 @@ window.__ModuleLoader__.load({
         else {
           overlay.setAttribute('data-transitioning', '')
           transitionTimer = window.setTimeout(settleTransition, 220)
-        }
-        for (const button of canvasButtons) {
-          const active = (button.dataset.view === 'map') === map
-          button.classList.toggle('active', active)
-          button.setAttribute('aria-pressed', String(active))
         }
         for (const notify of mapSubscribers) notify(map)
         if (!map) {
@@ -275,7 +284,7 @@ window.__ModuleLoader__.load({
           mapSubscribers.add(notify)
           return () => { mapSubscribers.delete(notify) }
         }, [])
-        return React.createElement('div', { className: 'dsh-td-switch dsh-td-header-switch', role: 'group', 'aria-label': 'view switch', 'aria-hidden': map ? 'true' : undefined },
+        return React.createElement('div', { className: 'dsh-td-switch dsh-td-header-switch', 'data-view': map ? 'map' : 'dialog', role: 'group', 'aria-label': 'view switch', 'aria-hidden': map ? 'true' : undefined },
           React.createElement('button', {
             type: 'button', 'data-view': 'dialog', className: map ? '' : 'active', 'aria-pressed': String(!map),
             onClick: () => setMap(false),
