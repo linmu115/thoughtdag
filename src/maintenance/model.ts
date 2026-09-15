@@ -66,13 +66,28 @@ export function bindPlaceholder(graph: ManagedGraph, nodeId: string, session: { 
   return { ...graph, nodes: graph.nodes.map(node => node.id === nodeId ? { ...node, data: { kind: 'session', label: session.title, logicalSessionId: session.logicalSessionId } } : node) }
 }
 
-export function addSessionNode(graph: ManagedGraph, session: { logicalSessionId: string; title: string }): ManagedGraph {
+export function addSessionNode(graph: ManagedGraph, session: { logicalSessionId: string; title: string }, placement?: { upstreamOf?: string }): ManagedGraph {
   if (graph.nodes.some((node) => node.data.kind === 'session' && node.data.logicalSessionId === session.logicalSessionId)) return graph
-  return { ...graph, nodes: [...graph.nodes, { id: `session:${session.logicalSessionId}`, position: nextPosition(graph), data: { kind: 'session', label: session.title, logicalSessionId: session.logicalSessionId } }] }
+  const target = placement?.upstreamOf ? graph.nodes.find(node => node.data.logicalSessionId === placement.upstreamOf) : undefined
+  const position = target ? upstreamPosition(graph, target.position) : nextPosition(graph)
+  return { ...graph, nodes: [...graph.nodes, { id: `session:${session.logicalSessionId}`, position, data: { kind: 'session', label: session.title, logicalSessionId: session.logicalSessionId } }] }
 }
 
+const COLUMN_STEP = 320
+const ROW_STEP = 260
+
 export function nextPosition(graph: ManagedGraph): { x: number; y: number } {
-  return { x: (graph.nodes.length % 3) * 300 + 40, y: Math.floor(graph.nodes.length / 3) * 190 + 40 }
+  const last = graph.nodes.reduce<GraphNode | undefined>((lowest, node) => !lowest || node.position.y > lowest.position.y ? node : lowest, undefined)
+  return last ? { x: last.position.x, y: last.position.y + ROW_STEP } : { x: 40, y: 40 }
+}
+
+function upstreamPosition(graph: ManagedGraph, target: GraphNode['position']): GraphNode['position'] {
+  // Only place the new card. Existing positions may have been arranged by the user.
+  for (let lane = 0; ; lane++) {
+    const offset = Math.ceil(lane / 2) * (lane % 2 ? 1 : -1) * COLUMN_STEP
+    const position = { x: target.x + offset, y: target.y - ROW_STEP }
+    if (!graph.nodes.some(node => Math.abs(node.position.x - position.x) < 300 && Math.abs(node.position.y - position.y) < 200)) return position
+  }
 }
 
 export function importRelations(graph: ManagedGraph, relations: UpstreamRelation[]): ManagedGraph {
@@ -133,8 +148,8 @@ export function arrangeBySources(graph: ManagedGraph): ManagedGraph {
     if (path.has(id)) throw new Error('会话之间存在循环引用，已保留当前布局；可以手动排列这些节点。')
     path.add(id)
     const parents = (incoming.get(id) ?? []).map((parent) => visit(parent, new Set(path)))
-    const point = parents.length ? { x: parents[0].x, y: Math.max(...parents.map((parent) => parent.y)) + 200 } : { x: lane++ * 300 + 40, y: 40 }
-    while ([...positions.values()].some((value) => value.x === point.x && value.y === point.y)) point.x += 300
+    const point = parents.length ? { x: parents[0].x, y: Math.max(...parents.map((parent) => parent.y)) + ROW_STEP } : { x: lane++ * COLUMN_STEP + 40, y: 40 }
+    while ([...positions.values()].some((value) => value.x === point.x && value.y === point.y)) point.x += COLUMN_STEP
     positions.set(id, point)
     return point
   }

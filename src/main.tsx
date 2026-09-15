@@ -1,14 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fontsource-variable/inter/index.css'
-import '@fontsource-variable/jetbrains-mono/index.css'
-import './index.css'
+import { initDshAppearance } from './maintenance/theme'
 
 // Keep the managed canvas out of the standalone hydration, backup and model paths.
 if (import.meta.env.VITE_DSH_BRIDGE) {
-  void Promise.all([import('./maintenance/ManagedGraphApp'), import('./lib/appearance')])
-    .then(([{ default: ManagedGraphApp }, { initAppearance }]) => {
-      initAppearance()
+  const disposeAppearance = initDshAppearance()
+  window.addEventListener('pagehide', disposeAppearance, { once: true })
+  import.meta.hot?.dispose(disposeAppearance)
+  void import('./maintenance/ManagedGraphApp')
+    .then(({ default: ManagedGraphApp }) => {
       createRoot(document.getElementById('root')!).render(<StrictMode><ManagedGraphApp /></StrictMode>)
     })
     .catch(error => {

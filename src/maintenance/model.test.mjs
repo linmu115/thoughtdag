@@ -16,6 +16,35 @@ test('empty cards do not create native identities and binding preserves position
 test('repeated existing session additions reuse one identity', () => {
   const first = sessions(); assert.equal(addSessionNode(first, { logicalSessionId: 'a', title: 'Renamed' }), first)
 })
+
+test('default additions follow the lowest card vertically and retain explicit canvas positions', () => {
+  const first = addSessionNode(EMPTY_GRAPH, { logicalSessionId: 'a', title: 'A' })
+  const second = addPlaceholder(first, 'blank')
+  assert.equal(second.nodes[0].position.x, second.nodes[1].position.x)
+  assert.ok(second.nodes[1].position.y - second.nodes[0].position.y >= 200)
+  const moved = { ...second, nodes: second.nodes.map(node => node.id === 'blank' ? { ...node, position: { x: 957, y: 1234 } } : node) }
+  const third = addSessionNode(moved, { logicalSessionId: 'c', title: 'C' })
+  assert.deepEqual(third.nodes.slice(0, 2), moved.nodes)
+  assert.equal(third.nodes[2].position.x, 957)
+  assert.ok(third.nodes[2].position.y > 1234)
+  assert.deepEqual(addPlaceholder(third, 'at-pointer', { x: -11, y: 52 }).nodes.at(-1).position, { x: -11, y: 52 })
+})
+
+test('imported upstream cards sit above the owner, distribute multiple parents and keep saved layouts', () => {
+  const owner = { ...addSessionNode(EMPTY_GRAPH, { logicalSessionId: 'b', title: 'B' }), ownerSessionId: 'b' }
+  let graph = addSessionNode(owner, { logicalSessionId: 'a', title: 'A' }, { upstreamOf: 'b' })
+  assert.equal(graph.nodes[0].position.x, graph.nodes[1].position.x)
+  assert.ok(graph.nodes[1].position.y < graph.nodes[0].position.y)
+  const initial = structuredClone(graph.nodes)
+  for (const id of ['c', 'd', 'e', 'f']) graph = addSessionNode(graph, { logicalSessionId: id, title: id }, { upstreamOf: 'b' })
+  assert.deepEqual(graph.nodes.slice(0, 2), initial)
+  const parents = graph.nodes.slice(1)
+  assert.ok(parents.every(node => node.position.y < graph.nodes[0].position.y))
+  assert.equal(new Set(parents.map(node => node.position.y)).size, 1)
+  for (const [index, node] of parents.entries()) for (const other of parents.slice(index + 1)) assert.ok(Math.abs(node.position.x - other.position.x) >= 300)
+  const manual = { ...graph, nodes: graph.nodes.map(node => node.data.logicalSessionId === 'a' ? { ...node, position: { x: -71, y: 999 } } : node) }
+  assert.equal(addSessionNode(manual, { logicalSessionId: 'a', title: 'A' }, { upstreamOf: 'b' }), manual)
+})
 test('explicit import is target scoped, accepts authoritative drafts and never revives tombstones', () => {
   const first = importRelations({ ...sessions(), removedRelationIds: ['removed'] }, [relation, { ...relation, referenceId: 'removed' }, { ...relation, referenceId: 'revoked', state: 'revoked' }, { ...relation, referenceId: 'other-owner', targetSessionId: 'a' }, { ...relation, referenceId: 'draft', state: 'pending' }])
   assert.deepEqual(first.edges.map(edge => edge.data.relationId), ['ref-1', 'draft'])
