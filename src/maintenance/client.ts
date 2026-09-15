@@ -27,7 +27,12 @@ const BASE = '/thoughtdag/api/managed'
 async function request<T>(endpoint: string, query: Record<string, string | undefined> = {}, body?: unknown): Promise<T> {
   const url = new URL(`${BASE}/${endpoint}`, window.location.origin)
   for (const [key, value] of Object.entries(query)) if (value !== undefined) url.searchParams.set(key, value)
-  const response = await fetch(url, { credentials: 'same-origin', signal: AbortSignal.timeout(30_000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) })
+  let response: Response
+  try { response = await fetch(url, { credentials: 'same-origin', signal: AbortSignal.timeout(30_000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }) }
+  catch (cause) {
+    const timedOut = cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError')
+    throw new ManagedApiError(timedOut ? '请求超时，尚未确认操作结果；本地布局仍保留，请同步主干后重试。' : '无法连接会话图服务；本地布局仍保留，请检查连接后重试。', 0)
+  }
   const result = await response.json().catch(() => null) as { error?: string | { message?: string }; message?: string; status?: string } | null
   if (!response.ok) {
     const message = typeof result?.error === 'string' ? result.error : result?.error?.message ?? result?.message

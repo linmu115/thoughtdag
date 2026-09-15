@@ -30,6 +30,7 @@ export type GraphEdge = {
 export type ManagedGraph = {
   managedSchema: 2
   ownerSessionId: string | null
+  archivedAt?: string | null
   nodes: GraphNode[]
   edges: GraphEdge[]
   viewport?: { x: number; y: number; zoom: number }

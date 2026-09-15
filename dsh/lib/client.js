@@ -66,9 +66,9 @@ window.__ModuleLoader__.load({
 
       const send = (type, payload) => frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin)
       const graphJson = async path => {
-        const response = await fetch('/thoughtdag/api/managed/' + path, { credentials: 'same-origin' })
+        const response = await fetch('/thoughtdag/api/managed/' + path, { credentials: 'same-origin', signal: AbortSignal.timeout(25_000) })
         const value = await response.json()
-        if (!response.ok) throw new Error(value.error || '会话图暂不可用')
+        if (!response.ok) throw new Error(typeof value.error === 'string' ? value.error : value.error?.message || '会话图暂不可用')
         return value
       }
       const annotation = () => {
@@ -152,6 +152,11 @@ window.__ModuleLoader__.load({
         const session = currentSession()
         send('td:current-session', { session })
       }
+      const referencesChanged = () => send('td:graph-changed', {})
+      const sessionsChanged = () => { syncCurrent(); referencesChanged() }
+      window.addEventListener('dsh-session-references-changed', referencesChanged)
+      window.addEventListener('focus', referencesChanged)
+      const stopSessionChanges = ctx.sessions.list.subscribe?.(sessionsChanged)
 
       const setMap = map => {
         if (map === mapState) return
@@ -237,6 +242,9 @@ window.__ModuleLoader__.load({
       window.addEventListener('message', receive)
       ctx.effect(() => () => {
         window.removeEventListener('message', receive)
+        window.removeEventListener('dsh-session-references-changed', referencesChanged)
+        window.removeEventListener('focus', referencesChanged)
+        if (typeof stopSessionChanges === 'function') stopSessionChanges()
         window.removeEventListener('resize', updateCanvasPosition)
         window.removeEventListener('scroll', updateCanvasPosition, true)
         positionObserver.disconnect()

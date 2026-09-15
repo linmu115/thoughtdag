@@ -23,6 +23,10 @@ DSH 入口使用当前实例的 Maintenance 与 Annotation 服务；仓库独立
 
 保存使用修订比较。冲突保留当前编辑，可将本地布局另存未绑定恢复草稿，然后读取服务器主干。恢复草稿不复制活动权限；权威引用仍保留在原主干及 Annotation 数据域。
 
+蓝色引用删除、会话列表变化、面板重新显示和窗口恢复时，图会自动核对服务器状态；可见时每 10 秒补充核对。被撤销的边和服务器移除的来源卡片及时更新，未保存的位置、名称和新卡片保留。归档主干显示只读状态，禁止开始会话和修改；未保存布局可另存为无引用权限的草稿。恢复会话后再次自动核对，已撤销引用不会恢复。
+
+“在此节点开始会话”先读取权威主干，再准备合法引用。如果引用服务拒绝或请求超时，会保留明确的错误原因，并提供“刷新引用并重试开始”和“返回对话检查”；不会通过跳过引用校验来继续，也不会发送用户正文。
+
 全局维护网络、全局影响查看、准备重答专属入口及其前端查询已移除。共享对象服务、按域维护、已有贴纸/笔记关联和独立应用保留；本轮不批量删除旧对象。
 
 ## 能力与边界
@@ -37,7 +41,7 @@ DSH 入口使用当前实例的 Maintenance 与 Annotation 服务；仓库独立
 ## 开发验证
 
 ```sh
-node --experimental-strip-types --test src/maintenance/model.test.mjs src/maintenance/client.test.mjs dsh/tests/managed-host.test.mjs
+node --experimental-strip-types --test src/maintenance/model.test.mjs src/maintenance/client.test.mjs src/maintenance/sync.test.mjs dsh/tests/managed-host.test.mjs dsh/tests/managed-client.test.mjs
 npm run dsh:build
 node dsh/scripts/verify-ui.mjs
 ```

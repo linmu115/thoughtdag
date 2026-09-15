@@ -86,3 +86,19 @@ test('selection capture binds the version that the user actually previewed', () 
   assert.equal(capture.selectedText, 'selected focus')
   assert.equal(capture.anchorId, 'reply-end')
 })
+
+test('request timeout reports uncertain outcome with a recoverable sync instruction', async () => {
+  const previousWindow = globalThis.window, previousFetch = globalThis.fetch
+  globalThis.window = fakeWindow().value
+  globalThis.fetch = async () => { throw new DOMException('timed out', 'TimeoutError') }
+  try { await assert.rejects(managedApi.canvas('main'), error => error.status === 0 && /超时/.test(error.message) && /同步主干后重试/.test(error.message)) }
+  finally { globalThis.window = previousWindow; globalThis.fetch = previousFetch }
+})
+
+test('network failure preserves a readable recovery instruction', async () => {
+  const previousWindow = globalThis.window, previousFetch = globalThis.fetch
+  globalThis.window = fakeWindow().value
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+  try { await assert.rejects(managedApi.canvas('main'), error => error.status === 0 && /无法连接/.test(error.message) && /本地布局仍保留/.test(error.message)) }
+  finally { globalThis.window = previousWindow; globalThis.fetch = previousFetch }
+})
