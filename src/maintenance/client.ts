@@ -1,6 +1,6 @@
 import type { ManagedGraph, UpstreamRelation } from './model'
 
-export type Status = { protocolVersion: 2; mode: 'maintenance'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean }; reason?: string }
+export type Status = { protocolVersion: 2; mode: 'maintenance'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean; nativeContext?: boolean }; reason?: string }
 export type Page<T> = { items: T[]; nextCursor?: string | null }
 export type DirectoryItem = { id: string; title: string; logicalSessionId?: string }
 export type SessionIdentity = { logicalSessionId: string; nativeSessionId: string; title: string }
@@ -24,11 +24,11 @@ export class ManagedApiError extends Error {
 
 const BASE = '/thoughtdag/api/managed'
 
-async function request<T>(endpoint: string, query: Record<string, string | undefined> = {}, body?: unknown): Promise<T> {
+async function request<T>(endpoint: string, query: Record<string, string | undefined> = {}, body?: unknown, signal?: AbortSignal): Promise<T> {
   const url = new URL(`${BASE}/${endpoint}`, window.location.origin)
   for (const [key, value] of Object.entries(query)) if (value !== undefined) url.searchParams.set(key, value)
   let response: Response
-  try { response = await fetch(url, { credentials: 'same-origin', signal: AbortSignal.timeout(30_000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }) }
+  try { response = await fetch(url, { credentials: 'same-origin', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) }) }
   catch (cause) {
     const timedOut = cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError')
     throw new ManagedApiError(timedOut ? '请求超时，尚未确认操作结果；本地布局仍保留，请同步主干后重试。' : '无法连接会话图服务；本地布局仍保留，请检查连接后重试。', 0)
@@ -43,6 +43,7 @@ async function request<T>(endpoint: string, query: Record<string, string | undef
 }
 
 export const managedApi = {
+  nativeContext: <T>(nativeSessionId: string, operation: string, input: Record<string, unknown> = {}, signal?: AbortSignal) => request<T>('native-context', {}, { nativeSessionId, operation, input }, signal),
   status: () => request<Status>('status'),
   directory: (workspaceId?: string, after?: string) => request<Page<DirectoryItem>>('directory', { workspaceId, after }),
   resolve: (logicalSessionId: string) => request<SessionIdentity>('resolve', { logicalSessionId }),

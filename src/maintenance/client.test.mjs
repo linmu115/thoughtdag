@@ -87,6 +87,22 @@ test('selection capture binds the version that the user actually previewed', () 
   assert.equal(capture.anchorId, 'reply-end')
 })
 
+test('context requests send current native identity through same-origin bridge and support cancellation', async () => {
+  const previousWindow = globalThis.window, previousFetch = globalThis.fetch
+  globalThis.window = fakeWindow().value
+  const controller = new AbortController()
+  let seen
+  globalThis.fetch = async (url, options) => { seen = { url, options }; return new Response(JSON.stringify({ revision: 2 })) }
+  try {
+    await managedApi.nativeContext('current-native', 'requests', { referenceId: 'fixed-reference' }, controller.signal)
+    assert.equal(seen.url.pathname, '/thoughtdag/api/managed/native-context')
+    assert.equal(seen.options.credentials, 'same-origin')
+    assert.deepEqual(JSON.parse(seen.options.body), { nativeSessionId: 'current-native', operation: 'requests', input: { referenceId: 'fixed-reference' } })
+    controller.abort()
+    assert.equal(seen.options.signal.aborted, true)
+  } finally { globalThis.window = previousWindow; globalThis.fetch = previousFetch }
+})
+
 test('request timeout reports uncertain outcome with a recoverable sync instruction', async () => {
   const previousWindow = globalThis.window, previousFetch = globalThis.fetch
   globalThis.window = fakeWindow().value

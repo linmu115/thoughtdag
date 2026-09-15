@@ -94,6 +94,26 @@ test('v2 capability gate and graph scope do not expose credentials', async t => 
   assert.equal((await f.api('status')).body.capabilities.mainGraph, false)
   assert.equal((await f.api('save', { method: 'POST', body: {} })).status, 503)
 })
+
+test('native context bridge is capability gated and always uses the user-scoped host entry', async t => {
+  const f = await fixture(t)
+  assert.equal((await f.api('status')).body.capabilities.nativeContext, false)
+  const body = { nativeSessionId: 'current-native', operation: 'source-set', input: { referenceId: 'reference', enabled: false, expectedRevision: 2, operationId: 'pause-once' } }
+  assert.equal((await f.api('native-context', { method: 'POST', body })).status, 503)
+  f.services.maintenanceNativeContext = { protocolVersion: 1, requestAsUser: async (...args) => { f.calls.push(['context-user', ...args]); return { schemaVersion: 1 } } }
+  assert.equal((await f.api('status')).body.capabilities.nativeContext, true)
+  assert.equal((await f.api('native-context', { method: 'POST', body })).status, 200)
+  assert.deepEqual(f.calls.at(-1), ['context-user', 'current-native', 'source-set', body.input])
+  for (const key of ['actor', 'runId', 'profileId', 'instanceId', 'ownerSessionId', 'targetSessionId', 'targetNativeSessionId', 'executionId']) {
+    assert.equal((await f.api('native-context', { method: 'POST', body: { ...body, input: { ...body.input, [key]: 'forged' } } })).status, 422)
+  }
+  assert.equal((await f.api('native-context', { method: 'POST', body: { ...body, operation: 'save-any-graph' } })).status, 422)
+  assert.equal((await f.api('native-context', { method: 'POST', body, origin: false })).status, 403)
+  f.services.maintenanceNativeContext.requestAsUser = async () => { throw Object.assign(new Error('unconfirmed native response'), { status: 503 }) }
+  assert.equal((await f.api('native-context', { method: 'POST', body })).status, 503)
+  f.services.maintenanceNativeContext.requestAsUser = async () => { throw new TypeError('network unavailable') }
+  assert.equal((await f.api('native-context', { method: 'POST', body })).status, 503)
+})
 test('only target-scoped relations and separate disclosure paging are exposed', async t => {
   const f = await fixture(t)
   assert.equal((await f.api('relations')).status, 422)

@@ -60,6 +60,25 @@ html[data-dsh-managed], html[data-dsh-managed] body, html[data-dsh-managed] #roo
 .mg-app h3 { font-size: 14px; line-height: 22px; }
 .mg-app p { color: var(--mg-muted); }
 .mg-app small { color: var(--mg-muted); font-size: 12px; line-height: 20px; }
+.mg-source-context { display: grid; gap: 16px; margin-block: 12px; }
+.mg-source-context > header, .mg-context-material > header, .mg-request-row > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mg-context-layer { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--mg-line); border-radius: var(--mg-radius); background: var(--mg-panel); }
+.mg-context-layer dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
+.mg-context-layer dt { color: var(--mg-muted); }
+.mg-context-layer code, .mg-context-ranges code { overflow-wrap: anywhere; font-size: 12px; }
+.mg-context-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mg-context-check { display: inline-flex; align-items: center; gap: 8px; color: var(--mg-muted); font-size: 12px; }
+.mg-context-check input { accent-color: var(--mg-accent); }
+.mg-context-ranges { display: grid; gap: 8px; margin: 0; padding-left: 22px; }
+.mg-context-ranges li > span { display: block; color: var(--mg-muted); }
+.mg-context-material, .mg-request-row { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--mg-line); border-radius: 12px; background: var(--mg-sidebar); }
+.mg-context-material[data-state="release-pending"] { border-color: var(--mg-accent); }
+.mg-context-material[data-state="released"] { opacity: .75; }
+.mg-request-directory { display: grid; gap: 12px; margin-top: 12px; }
+.mg-request-answer { display: grid; gap: 12px; padding: 12px; border-left: 2px solid var(--mg-accent); background: var(--mg-panel); }
+.mg-request-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--mg-text) !important; }
+.mg-context-operation { padding: 10px 0; border-bottom: 1px solid var(--mg-line); }
+.mg-source-context summary { cursor: pointer; color: var(--mg-muted); padding-block: 6px; }
 .mg-app input, .mg-app select { min-width: 0; padding: 9px 12px; border: 1px solid var(--mg-line); border-radius: 10px; background: var(--mg-panel); }
 .mg-app .mg-primary { color: var(--mg-accent-text); background: var(--mg-accent); border-color: transparent; font-weight: 500; }
 .mg-app .mg-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--mg-accent) 88%, var(--mg-text)); }

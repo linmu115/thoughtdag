@@ -4,7 +4,7 @@
 
 This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.8**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.9**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
 
 ## What the DSH panel does
 
@@ -40,6 +40,10 @@ Touch devices can use the card's **⋯** button and **画布更多操作**. Keyb
 
 ## Bounded context, disclosed as needed
 
+With the matching `maintenanceNativeContext` protocol 1 host, right-click a card and open **管理来源上下文**, or inspect a connection. The panel separates the immutable authorization boundary, selected disjoint windows, actually retained native input materials, and historical disclosure coverage. Browse real user requests, preview their fixed question/answer pair, select ranges, and explicitly save the window. A user preview is not model delivery.
+
+Pause/resume, source-scoped release and user pins use the same current-session service as native tools. Source-scoped release preserves other independent holders; releasing a whole shared material is separately labelled. Pending release is shown as pending until the native surface receipt confirms it. Refresh preserves an unsaved window plan, and retrying an uncertain mutation reuses its operation identity. Missing capabilities are disabled. This stage targets the native DSH Agent, not hosted engine context rewriting. See [implementation and synthetic UI checks](docs/changes/2026-09-15-native-context-ui.md).
+
 A reference records a source version and the last completed reply it may read. Later source messages do not expand that boundary. The first send can include the selected reply's question-and-answer turn within the configured budget; earlier authorized history is available through bounded read/search tools as needed. Connecting a source does not insert its complete history into every request.
 
 Use **查看来源** on a card for a read-only preview. If a source has several independent fixed references, choose the range to inspect. Selected text can still become a material card, a reference to another session, or a session sticker.
@@ -68,7 +72,7 @@ cd dsh
 npm pack
 ```
 
-This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.8.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
+This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.9.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
 
 Local verification:
 

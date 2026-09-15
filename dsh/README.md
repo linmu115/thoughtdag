@@ -1,6 +1,6 @@
 # dsh-thoughtdag · DSH 会话主干图
 
-当前源码版本 **0.4.14-rc2.8**，目标宿主 **DeepSeek Harness 0.1.5-rc.2**。插件在真实会话标题栏提供 **对话 / 思维图** 切换，把上下文来源组织到接收会话自己的主干中。每次回答仍在原生会话中进行，由用户发送。
+当前源码版本 **0.4.14-rc2.9**，目标宿主 **DeepSeek Harness 0.1.5-rc.2**。插件在真实会话标题栏提供 **对话 / 思维图** 切换，把上下文来源组织到接收会话自己的主干中。每次回答仍在原生会话中进行，由用户发送。
 
 这是 [ThoughtDAG 定制分支](../README_ZH.md)的插件包。下面介绍当前代码和已验证的本地组合，不表示同版本 npm 包或公开下载附件已经发布。上游包名、上游下载链接和 `@latest` 不能替代这个组合。
 
@@ -11,7 +11,7 @@
 | DeepSeek Harness | 0.1.5-rc.2 | 原生工作区、会话、输入框与模型执行 |
 | Maintenance 插件 / Engine | 0.2.26-rc2.14 / 0.1.33-rc2.18 | 稳定会话身份、图协议 2、固定源读取、撤销与归档 |
 | Annotation Core | 0.3.12-rc2.9 | 统一引用准备、发送状态和已发送引用恢复 |
-| ThoughtDAG | 0.4.14-rc2.8 | 主干图 UI 与原生会话入口 |
+| ThoughtDAG | 0.4.14-rc2.9 | 主干图 UI 与原生会话入口 |
 | Session Sticker Board | 0.7.3-rc2.15 | 会话贴纸及来源蓝色引用入口；使用这些入口时需要 |
 
 所有服务必须指向同一 DSH 实例。Obsidian 笔记关联还需要配套 Lifecycle、Reference Adapter 与 Vault 伴侣插件；基础主干图不要求打开 Obsidian。组件以实际能力检查为准，缺少协议或版本不匹配时会显示错误，不回落到旧写入接口。
@@ -27,12 +27,12 @@ cd dsh
 npm pack
 ```
 
-`npm pack` 也会执行插件构建，产物为当前目录中的 `dsh-thoughtdag-0.4.14-rc2.8.tgz`，包含嵌入 SPA、宿主入口和客户端入口，不需要另装 ThoughtDAG 桌面版。
+`npm pack` 也会执行插件构建，产物为当前目录中的 `dsh-thoughtdag-0.4.14-rc2.9.tgz`，包含嵌入 SPA、宿主入口和客户端入口，不需要另装 ThoughtDAG 桌面版。
 
 使用 Launcher 时，在目标实例中更新配套本地包，并保留已配置的 Suite 父子加载关系。使用 CLI 时，先切换到目标实例原有的 Home/profile 环境并准备好上表依赖；在刚才的 `dsh` 目录安装本地文件：
 
 ```sh
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.8.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.9.tgz
 ```
 
 随后按该实例原有方式重启 DSH，刷新浏览器页面。这个命令只安装 ThoughtDAG，不能代替 Maintenance Engine 的配置，也不会自动取得尚未公开发布的配套 RC2 包。

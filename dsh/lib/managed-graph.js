@@ -2,6 +2,7 @@
 const NAMESPACE = 'thoughtdag'
 const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links', 'stickers'])
 const MAX_BYTES = 512 * 1024
+const NATIVE_CONTEXT_OPERATIONS = new Set(['status', 'inspect', 'requests', 'user-read', 'window-set', 'source-set', 'pin', 'release', 'graph-edit', 'discover'])
 
 export class ManagedGraphError extends Error {
   constructor(status, message) { super(message); this.status = status }
@@ -72,9 +73,24 @@ export function createManagedGraph(ctx) {
         sessions = true
       } catch (error) { reason = publicError(error) }
       return { protocolVersion: 2, mode: 'maintenance', capabilities: { storage, sessions, mainGraph: !!graph,
-        references: sessions && service(ctx, 'maintenanceSessionContext')?.protocolVersion === 1 }, ...(reason ? { reason } : {}) }
+        references: sessions && service(ctx, 'maintenanceSessionContext')?.protocolVersion === 1,
+        nativeContext: service(ctx, 'maintenanceNativeContext')?.protocolVersion === 1 && typeof service(ctx, 'maintenanceNativeContext')?.requestAsUser === 'function' }, ...(reason ? { reason } : {}) }
     }
     if (!graph || !bridge) throw new ManagedGraphError(503, '当前实例缺少匹配的会话图接口或存储，请检查维护插件配置')
+    if (method === 'POST' && operation === 'native-context') {
+      const nativeContext = service(ctx, 'maintenanceNativeContext')
+      if (nativeContext?.protocolVersion !== 1 || typeof nativeContext.requestAsUser !== 'function') throw new ManagedGraphError(503, '当前实例尚未接入原生上下文管理，请安装匹配版本')
+      if (!NATIVE_CONTEXT_OPERATIONS.has(input.operation)) throw invalid('没有这个上下文操作')
+      const payload = input.input ?? {}
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw invalid('上下文操作参数无效')
+      if (['actor', 'runId', 'profileId', 'instanceId', 'ownerSessionId', 'targetSessionId', 'targetNativeSessionId', 'executionId'].some(key => key in payload)) throw invalid('上下文操作不能覆盖当前会话身份')
+      try { return await nativeContext.requestAsUser(id(input.nativeSessionId, '当前会话'), input.operation, payload) }
+      catch (error) {
+        const status = Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status
+          : ['AbortError', 'TimeoutError', 'TypeError'].includes(error?.name) ? 503 : 409
+        throw new ManagedGraphError(status, publicError(error))
+      }
+    }
     const after = optional(query.get('after'), '分页位置')
     if (method === 'GET') {
       if (operation === 'directory') return graph.directory(optional(query.get('workspaceId'), '工作区'), after)
