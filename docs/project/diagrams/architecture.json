@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ThoughtDAG · DSH 会话主干图 · 职责与数据归属",
+    "locale": "zh-CN"
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "真实 DSH 会话",
+      "sublabel": "用户问题 · 草稿 · 附件",
+      "pos": [
+        60,
+        100
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "managed",
+      "type": "frontend",
+      "label": "ManagedGraphApp",
+      "sublabel": "主干 · 布局 · 右键操作",
+      "pos": [
+        400,
+        100
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "context",
+      "type": "frontend",
+      "label": "来源上下文面板",
+      "sublabel": "请求目录 · 窗口 · 保留",
+      "pos": [
+        740,
+        100
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "bridge",
+      "type": "backend",
+      "label": "当前会话桥接",
+      "sublabel": "固定身份 · 同源调用",
+      "pos": [
+        400,
+        360
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "maintenance",
+      "type": "database",
+      "label": "Maintenance",
+      "sublabel": "图 · 版本 · 回执",
+      "pos": [
+        60,
+        600
+      ],
+      "size": [
+        200,
+        84
+      ]
+    },
+    {
+      "id": "core",
+      "type": "external",
+      "label": "Annotation Core",
+      "sublabel": "引用 · 原生披露与释放",
+      "pos": [
+        740,
+        600
+      ],
+      "size": [
+        200,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c0",
+      "from": "user",
+      "to": "managed",
+      "label": "打开当前主干"
+    },
+    {
+      "id": "c1",
+      "from": "managed",
+      "to": "context",
+      "label": "选定固定来源"
+    },
+    {
+      "id": "c2",
+      "from": "managed",
+      "to": "bridge",
+      "label": "图领域操作",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        500,
+        272
+      ]
+    },
+    {
+      "id": "c3",
+      "from": "context",
+      "to": "bridge",
+      "label": "来源状态操作",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          840,
+          260
+        ],
+        [
+          680,
+          260
+        ],
+        [
+          680,
+          402
+        ]
+      ],
+      "labelAt": [
+        760,
+        248
+      ]
+    },
+    {
+      "id": "c4",
+      "from": "bridge",
+      "to": "maintenance",
+      "label": "校验归属与持久状态",
+      "fromSide": "left",
+      "toSide": "top",
+      "via": [
+        [
+          160,
+          402
+        ]
+      ],
+      "labelAt": [
+        250,
+        390
+      ]
+    },
+    {
+      "id": "c5",
+      "from": "bridge",
+      "to": "core",
+      "label": "创建 / 准备 / 撤销引用",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          500,
+          642
+        ]
+      ],
+      "labelAt": [
+        620,
+        630
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "阅读约定",
+      "items": [
+        "箭头标明具体交接；位置不表示运行顺序。",
+        "外部依赖用项目 ID 关联；本图不保存另一项目的全文。"
+      ]
+    }
+  ]
+}

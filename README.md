@@ -112,3 +112,7 @@ The [upstream project](https://github.com/chenxiachan/thoughtdag) provides its o
 ThoughtDAG was created by Xia Chen and its upstream contributors. This fork preserves the standalone application and adds the managed DSH integration. Contributions should distinguish standalone changes from changes to `src/maintenance/` and `dsh/`.
 
 [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE) · [Upstream repository](https://github.com/chenxiachan/thoughtdag)
+
+## 项目维护地图
+
+从[项目地图](docs/project/map.md)查当前能力、设计、接口与实现；验证记录独立保存。机器检索入口为 [project.yaml](docs/project/project.yaml)。资料改变时只维护相关条目，页面按需生成。

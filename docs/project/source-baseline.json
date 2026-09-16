@@ -1,0 +1,61 @@
+{
+  "as_of": "2026-09-16",
+  "repositories": [
+    {
+      "repository": "thoughtdag",
+      "path": "../..",
+      "branch": "codex/rc2-maintenance-graph",
+      "commit": "37e6d9898046d533005cbb4170042cd9e97747ae"
+    },
+    {
+      "repository": "dsh-session-maintenance",
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance",
+      "branch": "codex/rc2-session-context-graph",
+      "commit": "5f3c066ffaba8751e377442da044c90a38cf22a5"
+    }
+  ],
+  "selected_sources": [
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-10-session-context-graph-requirements.md",
+      "sha256": "671d89b30fe5c68fa810fcff7da6d8a266026c5fcc0a2590500c3064f36602c9",
+      "bound_headings": [
+        "5.2 每个会话自己的主干图",
+        "5.3 右键菜单与开始会话",
+        "6.4 图中的固定上限与披露位置日志"
+      ]
+    },
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-15-native-agent-context-management.md",
+      "sha256": "9aaa05d99b69ca2016549dee323ca4ed00b04ad1584513951371b0b9cf14d74f",
+      "bound_headings": [
+        "7. 用户界面与 Maintenance Adapter"
+      ]
+    },
+    {
+      "path": "../../dsh/MANAGED.md",
+      "sha256": "ff82fbee7a6f1c26911f0b930ebbeb7db3f7af163996ea2b134cf7d332d0ec97",
+      "bound_headings": [
+        "使用流程",
+        "主干与迁移",
+        "能力与边界",
+        "开发验证"
+      ]
+    },
+    {
+      "path": "../../dsh/README.md",
+      "sha256": "628aa80e885d5e32b311c6ce238d2113dd44889a671f5a93c8b9abbcc2467814",
+      "bound_headings": [
+        "会话与思维图切换"
+      ]
+    },
+    {
+      "path": "../changes/2026-09-15-native-context-ui.md",
+      "sha256": "177520851c2ee4e54ca4b1e107bd6bb1e763775777d34a1f1c22064999a6786a",
+      "bound_headings": [
+        "维护入口",
+        "验证"
+      ]
+    }
+  ],
+  "note": "Adoption baseline before adding the map. Runtime deployment was not inspected. Refresh only affected entries when sources change."
+}

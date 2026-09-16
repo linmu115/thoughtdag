@@ -1,0 +1,120 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "ThoughtDAG · DSH 会话主干图 · 主要使用流程",
+    "locale": "zh-CN"
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "正常使用"
+    },
+    {
+      "id": "exception",
+      "label": "边界与恢复"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "open",
+      "lane": "main",
+      "col": 0,
+      "type": "backend",
+      "label": "打开当前会话的图",
+      "sublabel": "按需复用唯一主干",
+      "width": 170
+    },
+    {
+      "id": "card",
+      "lane": "main",
+      "col": 1,
+      "type": "backend",
+      "label": "添加来源或空卡片",
+      "sublabel": "空卡片未获读取权",
+      "width": 170
+    },
+    {
+      "id": "connect",
+      "lane": "main",
+      "col": 2,
+      "type": "backend",
+      "label": "确认有向引用",
+      "sublabel": "固定版本与完成截止",
+      "width": 170
+    },
+    {
+      "id": "enter",
+      "lane": "main",
+      "col": 3,
+      "type": "backend",
+      "label": "进入真实接收会话",
+      "sublabel": "准备引用并保留草稿",
+      "width": 170
+    },
+    {
+      "id": "send",
+      "lane": "main",
+      "col": 4,
+      "type": "backend",
+      "label": "用户发送与按需读取",
+      "sublabel": "记录实际披露和状态",
+      "width": 170
+    },
+    {
+      "id": "unsupported",
+      "lane": "exception",
+      "col": 2,
+      "type": "external",
+      "label": "能力或来源不可用",
+      "sublabel": "明确禁用或重试，不改读最新",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "open",
+      "to": "card"
+    },
+    {
+      "id": "e1",
+      "from": "card",
+      "to": "connect"
+    },
+    {
+      "id": "e2",
+      "from": "connect",
+      "to": "enter"
+    },
+    {
+      "id": "e3",
+      "from": "enter",
+      "to": "send"
+    },
+    {
+      "id": "unsupported-in",
+      "from": "connect",
+      "to": "unsupported",
+      "label": "能力或来源不可用",
+      "role": "branch",
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "open",
+    "card",
+    "connect",
+    "enter",
+    "send"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "open"
+    ],
+    "allowedTerminals": [
+      "send",
+      "unsupported"
+    ]
+  }
+}
