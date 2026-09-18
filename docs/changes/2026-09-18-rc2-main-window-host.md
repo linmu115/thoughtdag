@@ -1,0 +1,5 @@
+# RC2 header and conversation column correction
+
+The old switch used absolute top:50% while the real RC2 header/actions are static; it therefore positioned against the full-height conversation root. Establish the semantic header as its containing block through scoped CSS. Resolve the overlay and inert boundary from main.conversation and skip display:contents wrappers, retaining the older conversation fallback. No hashed class selector is used in production logic.
+
+The paired browser fixture now mirrors RC2 slot wrappers and static header/actions instead of providing a relative header and mock data-pane attributes. It verifies the switch stays inside the header, child windows occupy the full center without nested rails, outer rails remain available, independent drafts/modes and authenticated focus routing work, and replacing the conversation with settings hides the windows and restores inert. Browser regression and three client tests pass; embedded production build passes. These are structural regression results, not real-instance UI acceptance. No production instance or previous frozen candidate was modified.

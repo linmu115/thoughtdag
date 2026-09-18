@@ -40,6 +40,7 @@ window.__ModuleLoader__.load({
         .dsh-td-switch button:hover{color:var(--dsw-alias-label-primary,#0f1115)}
         .dsh-td-switch button.active{color:var(--dsw-alias-label-primary-inverted,#fff)}
         .dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}
+        header:has(.dsh-td-header-switch){position:relative}
         .dsh-td-header-switch{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2}
         .dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}
         .dsh-td-overlay{position:fixed;z-index:100;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
@@ -68,6 +69,13 @@ window.__ModuleLoader__.load({
       // 契约——session 作用域槽位的 inject 首参是 sessionKey，签名因槽位而异。
       let mapState = false
       const mapSubscribers = new Set()
+      const conversationColumn = element => {
+        const host = element?.closest('[data-slot="main.conversation"], [data-slot="conversation"]')
+        if (!host) return element?.closest('[data-pane="conversation"]')
+        let column = host.parentElement
+        while (column && getComputedStyle(column).display === 'contents') column = column.parentElement
+        return column
+      }
       let headerSwitch = null
       let positionFrame = null
       const positionCanvasSwitch = () => {
@@ -83,7 +91,7 @@ window.__ModuleLoader__.load({
         // actual borders, rather than depending on generated CSS module names.
         const header = headerSwitch.closest('header')
         const box = header?.getBoundingClientRect()
-        const center = headerSwitch.closest('[data-pane=conversation]') ?? headerSwitch.closest('[data-slot=conversation]')?.parentElement
+        const center = conversationColumn(headerSwitch)
         const bounds = center?.getBoundingClientRect() ?? box
         if (bounds) Object.assign(overlay.style, { left: bounds.left + 'px', top: bounds.top + 'px', width: bounds.width + 'px', height: bounds.height + 'px' })
         const rail = box?.width > 0 ? Math.max(0, box.left) : 0
@@ -112,7 +120,7 @@ window.__ModuleLoader__.load({
       const blockedRoots = new Map()
       const blockConversation = block => {
         if (block) {
-          const child = headerSwitch?.closest('[data-pane=conversation]') ?? headerSwitch?.closest('[data-slot=conversation]')?.parentElement
+          const child = conversationColumn(headerSwitch)
           if (child && !blockedRoots.has(child)) { blockedRoots.set(child, child.inert); child.inert = true }
         } else {
           for (const [element, inert] of blockedRoots) element.inert = inert
