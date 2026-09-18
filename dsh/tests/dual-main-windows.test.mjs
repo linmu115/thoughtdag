@@ -23,6 +23,7 @@ async function fixture() {
    if(op==='status')result={protocolVersion:2,capabilities:{storage:true,sessions:true,mainGraph:true,references:true}}
    else if(op==='resolve'){const id=url.searchParams.get('nativeSessionId')||url.searchParams.get('logicalSessionId');result={logicalSessionId:id,nativeSessionId:id,title:'合成会话 '+id.toUpperCase()}}
    else if(op==='ensure'){const id=input.logicalSessionId;if(!documents.has(id))documents.set(id,{objectId:id,revision:1,title:'合成会话 '+id.toUpperCase(),graph:{managedSchema:2,ownerSessionId:id,nodes:[],edges:[]}});result=documents.get(id)}
+   else if(op==='save'){const id=input.objectId||input.graph.ownerSessionId;const old=documents.get(id);result={objectId:id,revision:(old?.revision||0)+1,title:input.title||old?.title,graph:input.graph};documents.set(id,result)}
    else if(op==='canvas')result=documents.get(url.searchParams.get('objectId'))
    else if(op==='relations')result={items:[],nextCursor:null}
    else {res.statusCode=404;result={error:'unsupported synthetic operation'}}
@@ -40,7 +41,9 @@ else test('two real browser clients isolate drafts and modes, route navigation a
  await page.getByRole('button',{name:'并排打开',exact:true}).click();const right=page.frameLocator('iframe[title="右主窗口"]');await right.getByRole('textbox',{name:'合成输入框'}).fill('right draft')
  await page.getByRole('button',{name:'合成会话 B',exact:true}).click();await right.locator('[data-title]').filter({hasText:'合成会话 B'}).waitFor();assert.equal(await left.getByRole('textbox',{name:'合成输入框'}).inputValue(),'left draft')
  await right.getByRole('button',{name:'思维图',exact:true}).first().click();const canvas=right.frameLocator('iframe[title="ThoughtDAG"]');await canvas.getByRole('textbox',{name:'主干名称'}).waitFor();await page.waitForTimeout(200);assert.equal(await canvas.getByRole('textbox',{name:'主干名称'}).inputValue(),'合成会话 B')
- await page.getByRole('button',{name:'合成会话 C',exact:true}).click();await canvas.getByRole('textbox',{name:'主干名称'}).filter({visible:true}).waitFor();await page.waitForFunction(()=>true);await page.waitForTimeout(300);assert.equal(await canvas.getByRole('textbox',{name:'主干名称'}).inputValue(),'合成会话 C')
+ await left.getByRole('textbox',{name:'合成输入框'}).click();assert.equal(await page.evaluate(()=>window.fixtureSessions.list.getSnapshot().current),'a');
+ await canvas.locator('.mg-flow').click({position:{x:80,y:80}});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>window.fixtureSessions.list.getSnapshot().current),'b');
+ await page.getByRole('button',{name:'合成会话 C',exact:true}).click();await canvas.getByRole('textbox',{name:'主干名称'}).filter({visible:true}).waitFor();await canvas.locator('input[aria-label="主干名称"]').evaluate(async el=>{for(let i=0;i<50&&el.value!=='合成会话 C';i++)await new Promise(r=>setTimeout(r,100))});assert.equal(await canvas.getByRole('textbox',{name:'主干名称'}).inputValue(),'合成会话 C',await canvas.locator('.mg-banner').allTextContents())
  assert.equal(await canvas.getByRole('button',{name:'新建未绑定草稿',exact:true}).count(),0);assert.equal(await left.getByRole('textbox',{name:'合成输入框'}).inputValue(),'left draft')
  await page.getByRole('button',{name:'展开',exact:true}).click();const box=await page.locator('.dsh-main-windows').boundingBox();assert.ok(box.x>=169&&box.x+box.width<=1241,JSON.stringify(box))
  await page.getByRole('button',{name:'收起右窗',exact:true}).click();await page.getByRole('button',{name:'并排打开',exact:true}).click();assert.equal(await canvas.getByRole('textbox',{name:'主干名称'}).inputValue(),'合成会话 C')

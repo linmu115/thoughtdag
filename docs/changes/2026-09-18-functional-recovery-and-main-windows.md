@@ -9,3 +9,7 @@ host overlay按原生会话中心区域测量；只对被覆盖的会话区域�
 验证：TypeScript和DSH生产构建通过；managed-host 11项（含无SM/离线/恢复），client9项，graph-ui5项浏览器测试，以及dual-main-windows1项真实浏览器合成宿主测试。双窗用相邻BetterSidebar源码构建，验证独立草稿/模式、会话路由、左右栏、收起保留及无pageerror。原任务亦独立浏览器复核合成预览并给出顶栏反馈，已实施。未部署，真实DSH编辑器/历史引用/跨端写入仍未验收。
 
 开发历程：旧浏览器测试依赖已移除的草稿入口，已改为会话选择→ensure主干，继续验证拖拽、保存、窄屏菜单和权限分离。合成预览不会接入真实业务数据。
+
+补充：交叉焦点浏览器测试发现从左窗重新点击右窗嵌套图谱时未激活右窗，已通过受origin/source校验的td:activate→main-window-activate事件链修复。补测真实鼠标跨窗点击后再选择会话通过；合成server补齐CAS保存回执以保留切换前布局。
+
+明确剩余边界：本候选未完成会话贴纸的Maintenance可选职责解耦。当前会话贴纸仍调用maintenance-knowledge；503提示和恢复不能算离线创建能力。原生Core/ThoughtDAG保存路径接线将在本功能任务后续独立进行，不修改已冻结UI候选或另建第二存储。
