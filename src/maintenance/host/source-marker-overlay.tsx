@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpLeft, Quote, Unlink, X } from 'lucide-react';
+import { ArrowUpLeft, Unlink, X } from 'lucide-react';
 import type { GraphSessionIdentity } from '@linmu/dsh-session-contracts';
 import type { Context } from './geometry-contract';
 import type { StickerChatSnapshotLike } from './geometry-contract';
@@ -91,8 +91,8 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
     return located.flatMap((item, index) => {
       const rects = rectangles[index] ?? [];
       if (!rects.length) return [];
-      // Reserve the nearer column for ordinary red sticker symbols.
-      const point = spreadDotPoint({ x: rects.at(-1)!.right + 31, y: rects.at(-1)!.top + rects.at(-1)!.height / 2 }, placed);
+      // Place the badge beside the upper-right edge of the selected text.
+      const point = spreadDotPoint({ x: Math.min(window.innerWidth - 22, rects.at(-1)!.right + 2), y: Math.max(12, rects.at(-1)!.top) }, placed);
       placed.push(point);
       const alreadyHighlighted = ordinaryStickers.some(({ record }) => snapshot &&
         resolveRenderedAnchorKey(snapshot, record.anchorId) === item.renderedAnchorKey &&
@@ -168,7 +168,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
       onContextMenu={event => { event.preventDefault(); event.stopPropagation(); if (!navigating.current) setMenu({ key: group.key, mode: 'actions', point: { x: event.clientX, y: event.clientY } }); }}
       onKeyDown={event => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); event.stopPropagation(); if (!navigating.current) setMenu({ key: group.key, mode: 'actions' }); } }}
       onClick={event => { event.preventDefault(); event.stopPropagation(); void open(group.key); }}>
-      <Quote size={14} strokeWidth={1.6} aria-hidden="true" />
+      <span aria-hidden="true">{groups.findIndex(item => item.key === group.key) + 1}</span>
     </button>)}
     {activeMenu && menuPoint && <div ref={menuRef} className="dsh-thoughtdag-source-menu dsh-source-reference-menu" role={menu?.mode === 'actions' ? 'menu' : 'dialog'} aria-label={menu?.mode === 'actions' ? '会话引用操作' : '选择引用会话'}
       style={{ left: Math.max(8, Math.min(window.innerWidth - 280, menuPoint.x + 14)), top: Math.max(8, Math.min(window.innerHeight - Math.min(320, window.innerHeight * .6) - 8, menuPoint.y)) }}

@@ -30,7 +30,7 @@ graph-reference-actions-v1 是引用动作能力门槛；准备主干入向引�
 
 ## 贴纸和笔记的实际关联
 
-session-sticker 检查配套贴纸入口后发出 dsh-session-sticker-open 事件，携带选区定位供贴纸插件处理。它不是 ThoughtDAG 自己的会话贴纸存储器。
+会话贴纸由 ThoughtDAG 的 SessionStickerPanel 提供创建与管理入口，数据沿用 Maintenance stickers 扩展。新建流程见 [[DEC-session-sticker-new-conversation-20260919]]；它通过 Core addCrossSessionReference 建立来源 X 到新会话 Y 的引用，再进入 Y，不自动发送。旧版 dsh-session-sticker-open 转发描述已被职责修订替代。
 
 已有 stickers 对象导航到其会话；已有 obsidian-links 的 note-link 使用稳定笔记入口，旧位置型对象仍有 obsidian://open 路径。这些操作使用提供方已有对象，不意味着本插件实现 Vault 同步、笔记重命名或普通贴纸增删。
 

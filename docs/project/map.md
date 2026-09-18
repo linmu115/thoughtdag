@@ -1,5 +1,7 @@
 # ThoughtDAG · DSH 会话主干图
 
+会话贴纸的新建流程见 [[DEC-session-sticker-new-conversation-20260919|空白下游与工作区选择]]。
+
 当前职责修订见 [[DEC-selection-ownership-20260918|划选与会话贴纸归属]]；旧版入口说明以此修订为准。
 
 ## 这个项目做什么

@@ -51,9 +51,13 @@ async function refresh(){await act(async()=>{window.dispatchEvent(new Event(SOUR
 async function contextMenu(){await act(async()=>{const dot=host.querySelector('.dsh-source-reference-dot');expect(dot).toBeTruthy();expect(dot!.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:100,clientY:80}))).toBe(false);});}
 async function menuItem(label:string){await act(async()=>{const item=[...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button=>button.textContent===label);expect(item).toBeTruthy();item!.click();});}
 
-it('restores the source highlight and a blue marker from durable data and opens the real target without sending',async()=>{
+it('restores a numbered marker at the highlight upper-right and opens the real target without sending',async()=>{
   await render();expect(host.querySelectorAll('.dsh-source-reference-highlight')).toHaveLength(1);
   expect(host.querySelector('.dsh-source-reference-dot')?.getAttribute('data-dsh-source-message-id')).toBe('saved-message-id');
+  const badge=host.querySelector<HTMLElement>('.dsh-source-reference-dot')!;
+  expect(badge.textContent).toBe('1');
+  expect(badge.style.left).toBe('132px');
+  expect(badge.style.top).toBe('40px');
   await click('.dsh-source-reference-dot');expect(open).toHaveBeenCalledWith('native-y');
   expect(vi.mocked(knowledgeRequest).mock.calls.map(([op])=>op)).toEqual(['source-markers','source-markers','resolve']);
   await act(()=>root.unmount());root=createRoot(host);await render();

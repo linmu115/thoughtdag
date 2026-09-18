@@ -287,7 +287,6 @@ window.__ModuleLoader__.load({
         let fixed = capture
         if (capture) {
           if (capture.role !== 'assistant') throw new Error('请选择已完成的 AI 回复')
-          const identity = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(capture.sourceSessionId))
           let anchorId = capture.messageId ?? capture.anchorId
           const ui = (() => { try { return ctx.get('uiConversation') } catch { return undefined } })()
           const snapshot = ui?.binding(capture.sourceSessionId).target('chat').getSnapshot()
@@ -296,10 +295,15 @@ window.__ModuleLoader__.load({
             if (node.data?.status !== 'settled' || !node.data?.finalNode?.messageId) throw new Error('请等待来源回复保存完成')
             anchorId = node.data.finalNode.messageId
           }
-          const latest = capture.expectedSourceVersionId ? { sourceVersionId: capture.expectedSourceVersionId } : await graphJson('preview?logicalSessionId=' + encodeURIComponent(identity.logicalSessionId))
-          const preview = await graphJson('preview?' + new URLSearchParams({ logicalSessionId: identity.logicalSessionId, sourceVersionId: latest.sourceVersionId, sourceAnchorId: anchorId }))
-          if (!preview.capture) throw new Error('这段回复尚未提供可引用来源')
-          fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
+          if (kind === 'sticker') {
+            fixed = { ...capture, anchorId }
+          } else {
+            const identity = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(capture.sourceSessionId))
+            const latest = capture.expectedSourceVersionId ? { sourceVersionId: capture.expectedSourceVersionId } : await graphJson('preview?logicalSessionId=' + encodeURIComponent(identity.logicalSessionId))
+            const preview = await graphJson('preview?' + new URLSearchParams({ logicalSessionId: identity.logicalSessionId, sourceVersionId: latest.sourceVersionId, sourceAnchorId: anchorId }))
+            if (!preview.capture) throw new Error('这段回复尚未提供可引用来源')
+            fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
+          }
         }
         selectionIntent = { id: crypto.randomUUID(), kind, capture: fixed }
         setMap(true)
