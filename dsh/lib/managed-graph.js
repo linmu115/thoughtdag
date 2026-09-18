@@ -72,7 +72,7 @@ export function createManagedGraph(ctx) {
         await graph.directory()
         sessions = true
       } catch (error) { reason = publicError(error) }
-      return { protocolVersion: 2, mode: 'maintenance', capabilities: { storage, sessions, mainGraph: sessions && storage,
+      return { protocolVersion: 2, mode: 'maintenance', capabilities: { storage, sessions, mainGraph: !!graph,
         references: sessions && service(ctx, 'maintenanceSessionContext')?.protocolVersion === 1,
         nativeContext: service(ctx, 'maintenanceNativeContext')?.protocolVersion === 1 && typeof service(ctx, 'maintenanceNativeContext')?.requestAsUser === 'function' }, ...(reason ? { reason } : {}) }
     }

@@ -361,7 +361,6 @@ window.__ModuleLoader__.load({
 
       const receive = event => {
         if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.source !== 'dsh-thoughtdag') return
-        if (event.data.type === 'td:activate') { window.dispatchEvent(new Event('dsh-main-window-activate')); return }
         if (event.data.type === 'td:managed-request') {
           const { requestId, operation, input } = event.data
           if (typeof requestId !== 'string' || !requestId || requestId.length > 256) return
