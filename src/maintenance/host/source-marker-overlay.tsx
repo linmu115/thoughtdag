@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Trash2, X } from 'lucide-react';
+import { ArrowUpLeft, Quote, Unlink, X } from 'lucide-react';
 import type { GraphSessionIdentity } from '@linmu/dsh-session-contracts';
 import type { Context } from './geometry-contract';
 import type { StickerChatSnapshotLike } from './geometry-contract';
@@ -92,7 +92,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
       const rects = rectangles[index] ?? [];
       if (!rects.length) return [];
       // Reserve the nearer column for ordinary red sticker symbols.
-      const point = spreadDotPoint({ x: rects.at(-1)!.right + 31, y: rects[0]!.top + rects[0]!.height / 2 }, placed);
+      const point = spreadDotPoint({ x: rects.at(-1)!.right + 31, y: rects.at(-1)!.top + rects.at(-1)!.height / 2 }, placed);
       placed.push(point);
       const alreadyHighlighted = ordinaryStickers.some(({ record }) => snapshot &&
         resolveRenderedAnchorKey(snapshot, record.anchorId) === item.renderedAnchorKey &&
@@ -168,7 +168,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
       onContextMenu={event => { event.preventDefault(); event.stopPropagation(); if (!navigating.current) setMenu({ key: group.key, mode: 'actions', point: { x: event.clientX, y: event.clientY } }); }}
       onKeyDown={event => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); event.stopPropagation(); if (!navigating.current) setMenu({ key: group.key, mode: 'actions' }); } }}
       onClick={event => { event.preventDefault(); event.stopPropagation(); void open(group.key); }}>
-      <ArrowUpRight size={12} strokeWidth={2.5} aria-hidden="true" />
+      <Quote size={14} strokeWidth={1.6} aria-hidden="true" />
     </button>)}
     {activeMenu && menuPoint && <div ref={menuRef} className="dsh-thoughtdag-source-menu dsh-source-reference-menu" role={menu?.mode === 'actions' ? 'menu' : 'dialog'} aria-label={menu?.mode === 'actions' ? '会话引用操作' : '选择引用会话'}
       style={{ left: Math.max(8, Math.min(window.innerWidth - 280, menuPoint.x + 14)), top: Math.max(8, Math.min(window.innerHeight - Math.min(320, window.innerHeight * .6) - 8, menuPoint.y)) }}
@@ -183,7 +183,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
       }}>
       {menu?.mode === 'actions' ? <>
         <div className="dsh-thoughtdag-source-menu-title">会话引用</div>
-        <button type="button" role="menuitem" disabled={busy} onClick={() => void open(activeMenu.group.key)}><ArrowUpRight size={14} aria-hidden="true" /><span>{activeMenu.group.targets.length === 1 ? '进入会话' : '选择目标会话…'}</span></button>
+        <button type="button" role="menuitem" disabled={busy} onClick={() => void open(activeMenu.group.key)}><ArrowUpLeft size={14} aria-hidden="true" /><span>{activeMenu.group.targets.length === 1 ? '进入会话' : '选择目标会话…'}</span></button>
         <div className="dsh-source-reference-menu-separator" role="separator" />
         {activeMenu.group.references.map(reference => {
           const targetTitle = reference.targetTitle || '未命名会话';
@@ -191,7 +191,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
           const title = targetTitle + (sameTitle.length > 1 ? `（引用 ${sameTitle.findIndex(item => item.referenceId === reference.referenceId) + 1}）` : '');
           const label = activeMenu.group.references.length === 1 ? '删除引用' : `删除引用：${title}`;
           return <button type="button" role="menuitem" className="dsh-thoughtdag-source-danger" disabled={busy} key={reference.referenceId} title={label}
-            onClick={() => void remove(reference)}><Trash2 size={14} aria-hidden="true" /><span>{label}</span></button>;
+            onClick={() => void remove(reference)}><Unlink size={14} aria-hidden="true" /><span>{label}</span></button>;
         })}
       </> : <>
         <div className="dsh-thoughtdag-source-menu-title">选择要进入的会话</div>
