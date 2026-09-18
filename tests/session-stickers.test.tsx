@@ -1,0 +1,91 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach,beforeEach,expect,it,vi } from 'vitest';
+import { SessionStickerPanel } from '../src/maintenance/SessionStickerPanel.tsx';
+import { knowledgeRequest } from '../src/maintenance/session-stickers';
+vi.mock('../src/maintenance/session-stickers',()=>({knowledgeRequest:vi.fn(),migrateLegacyStickers:vi.fn(),MigrationConflict:class extends Error{}}));
+let root:ReturnType<typeof createRoot>,host:HTMLDivElement;
+import { parentRequest } from '../src/maintenance/client';
+vi.mock('../src/maintenance/client', () => ({ parentRequest: vi.fn(async () => ({ referenceId: 'ref' })) }));
+const openSession=vi.fn();
+beforeEach(()=>{
+  Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});host=document.createElement('div');document.body.append(host);root=createRoot(host);
+  vi.mocked(knowledgeRequest).mockImplementation(async(op,input)=>{
+    if(op==='create-workspaces')return{items:[{id:'native-workspace',title:'空工作区'}],nextCursor:null};
+    if(op==='directory')return{items:input?.workspaceId?[{id:'existing',logicalSessionId:'existing-logical',title:'已有会话'}]:[{id:'logical-workspace',title:'已有工作区'}],nextCursor:null};
+    if(op==='create-session')return{nativeSessionId:'new-native',logicalSessionId:'new-logical',title:'新会话'};
+    if(op==='resolve')return{nativeSessionId:'source',logicalSessionId:input?.logicalSessionId??'source-logical'};
+    if(op==='preview')return{sourceVersionId:'v1',capture:{anchorId:'completed-reply',messageId:'completed-reply',selectedText:'full reply'}};
+    if(op==='write')return{status:'committed'};
+    return{items:[],nextCursor:null};
+  });
+});
+afterEach(async()=>{await act(()=>root.unmount());host.remove();vi.clearAllMocks();});
+async function fixture(occurrence=0){await act(async()=>root.render(<SessionStickerPanel capture={{sourceSessionId:'source',anchorId:'completed-reply',messageId:'completed-reply',selectedText:'引用选区',role:'assistant',occurrence,expectedSourceVersionId:'v1'}} onClose={vi.fn()}/>));}
+async function click(label:string){await act(async()=>{const b=[...host.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')??b.textContent)===label);expect(b).toBeTruthy();b!.click();});}
+const creates=()=>vi.mocked(knowledgeRequest).mock.calls.filter(([op])=>op==='create-session');
+it('selects a native workspace before creation and preserves the selected upstream reference',async()=>{
+  await fixture();await click('新建独立会话');expect(creates()).toHaveLength(0);
+  expect(host.textContent).toContain('先选择工作区');await click('空工作区');expect(creates()).toHaveLength(0);
+  await click('在所选工作区新建会话');expect(creates()).toHaveLength(1);
+  expect(creates()[0]![1]).toEqual({operationId:expect.any(String),workspaceId:'native-workspace'});
+  expect(vi.mocked(parentRequest)).toHaveBeenCalledWith('stage-reference',expect.objectContaining({targetSessionId:'new-native',capture:expect.objectContaining({selectedText:'引用选区',expectedSourceVersionId:'v1'})}));
+  expect(knowledgeRequest).toHaveBeenCalledWith('write',expect.objectContaining({body:expect.objectContaining({logicalSessionId:'new-logical',source:expect.objectContaining({referenceId:'ref'})})}));
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+it('persists a bounded source selection with the real message ID and repeated-text occurrence',async()=>{
+  await fixture(2);await click('已有工作区');await click('已有会话');
+  expect(knowledgeRequest).toHaveBeenCalledWith('write',expect.objectContaining({body:expect.objectContaining({source:expect.objectContaining({
+    locator:{messageId:'completed-reply',selectedText:'引用选区',occurrence:2},
+  })})}));
+});
+
+it('does not persist a source marker or open the target when binding fails',async()=>{
+  vi.mocked(parentRequest).mockRejectedValueOnce(new Error('绑定失败'));
+  await fixture();await click('已有工作区');await click('已有会话');
+  expect(host.textContent).toContain('绑定失败');
+  expect(vi.mocked(knowledgeRequest).mock.calls.some(([op])=>op==='write')).toBe(false);
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+it('retries the same reference and sticker identities after a failed marker save',async()=>{
+  await fixture();await click('已有工作区');
+  const implementation=vi.mocked(knowledgeRequest).getMockImplementation()!;let failed=false;
+  vi.mocked(knowledgeRequest).mockImplementation(async(op,input)=>{if(op==='write'&&!failed){failed=true;throw new Error('保存失败');}return implementation(op,input);});
+  await click('已有会话');expect(host.textContent).toContain('保存失败');expect(openSession).not.toHaveBeenCalled();
+  await click('已有会话');
+  const writes=vi.mocked(knowledgeRequest).mock.calls.filter(([op])=>op==='write');
+  expect(writes[0]![1]).toEqual(writes[1]![1]);
+  expect(vi.mocked(parentRequest).mock.calls[0]).toEqual(vi.mocked(parentRequest).mock.calls[1]);
+});
+it('can still attach an existing session without creating one',async()=>{
+  await fixture();await click('已有工作区');await click('已有会话');expect(creates()).toHaveLength(0);
+  expect(knowledgeRequest).toHaveBeenCalledWith('resolve',{logicalSessionId:'existing-logical'});
+});
+it('retains selection and operation identity when creation fails and is retried',async()=>{
+  await fixture();await click('新建独立会话');await click('空工作区');
+  const implementation=vi.mocked(knowledgeRequest).getMockImplementation()!;let failed=false;
+  vi.mocked(knowledgeRequest).mockImplementation(async(op,input)=>{if(op==='create-session'&&!failed){failed=true;throw new Error('temporary failure');}return implementation(op,input);});
+  await click('在所选工作区新建会话');expect(host.textContent).toContain('temporary failure');expect(host.textContent).toContain('引用选区');
+  await click('在所选工作区新建会话');expect(creates()[0]![1]).toEqual(creates()[1]![1]);
+});
+it('does not create a session when cancelling workspace selection',async()=>{
+  await fixture();await click('新建独立会话');await click('空工作区');await click('重新选择工作区');await click('选择已有会话');expect(creates()).toHaveLength(0);
+});
+
+it('checks the exact completed source before creating, with no orphan session on source failure',async()=>{
+  await fixture();await click('新建独立会话');await click('空工作区');
+  const implementation=vi.mocked(knowledgeRequest).getMockImplementation()!;
+  vi.mocked(knowledgeRequest).mockImplementation(async(op,input)=>{if(op==='preview'&&input?.sourceAnchorId)throw new Error('来源回复不可用');return implementation(op,input);});
+  await click('在所选工作区新建会话');
+  expect(host.textContent).toContain('来源回复不可用');expect(host.textContent).toContain('引用选区');expect(creates()).toHaveLength(0);expect(vi.mocked(parentRequest)).not.toHaveBeenCalled();
+});
+
+ it('keeps the exact preview version and occurrence when staging the reference', async () => {
+  await fixture(2); await click('已有工作区'); await click('已有会话');
+  expect(knowledgeRequest).toHaveBeenCalledWith('preview', { logicalSessionId: 'source-logical', sourceVersionId: 'v1', sourceAnchorId: 'completed-reply' });
+  expect(vi.mocked(knowledgeRequest).mock.calls.filter(([op]) => op === 'preview')).toHaveLength(1);
+  expect(parentRequest).toHaveBeenCalledWith('stage-reference', expect.objectContaining({ capture: expect.objectContaining({ occurrence: 2, expectedSourceVersionId: 'v1' }) }));
+ });

@@ -2,17 +2,29 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "ThoughtDAG · DSH 会话主干图 · 主要使用流程",
+    "title": "已绑定来源建立固定引用并进入真实会话",
     "locale": "zh-CN"
   },
   "lanes": [
     {
       "id": "main",
-      "label": "正常使用"
+      "label": "ThoughtDAG 画布"
     },
     {
       "id": "exception",
-      "label": "边界与恢复"
+      "label": "ThoughtDAG 宿主反馈"
+    },
+    {
+      "id": "maintenance",
+      "label": "Maintenance"
+    },
+    {
+      "id": "core",
+      "label": "Annotation Core"
+    },
+    {
+      "id": "session",
+      "label": "真实 DSH 会话"
     }
   ],
   "nodes": [
@@ -21,18 +33,18 @@
       "lane": "main",
       "col": 0,
       "type": "backend",
-      "label": "打开当前会话的图",
-      "sublabel": "按需复用唯一主干",
-      "width": 170
+      "label": "打开当前主干",
+      "sublabel": "按当前会话ensure后复用",
+      "width": 194
     },
     {
       "id": "card",
       "lane": "main",
       "col": 1,
       "type": "backend",
-      "label": "添加来源或空卡片",
-      "sublabel": "空卡片未获读取权",
-      "width": 170
+      "label": "添加来源卡片",
+      "sublabel": "只加入节点，不自动授权",
+      "width": 194
     },
     {
       "id": "connect",
@@ -40,35 +52,98 @@
       "col": 2,
       "type": "backend",
       "label": "确认有向引用",
-      "sublabel": "固定版本与完成截止",
-      "width": 170
+      "sublabel": "已绑定来源、接收方和完成回复",
+      "width": 194
+    },
+    {
+      "id": "authorize",
+      "lane": "core",
+      "col": 2,
+      "type": "backend",
+      "label": "创建统一引用",
+      "sublabel": "来源捕获与操作身份",
+      "width": 194
+    },
+    {
+      "id": "freeze",
+      "lane": "maintenance",
+      "col": 2,
+      "type": "backend",
+      "label": "固定来源并维护主干",
+      "sublabel": "解析版本、截止和接收方",
+      "width": 194
     },
     {
       "id": "enter",
       "lane": "main",
       "col": 3,
       "type": "backend",
+      "label": "在此节点开始会话",
+      "sublabel": "先刷新其权威主干",
+      "width": 194
+    },
+    {
+      "id": "prepare",
+      "lane": "core",
+      "col": 3,
+      "type": "backend",
+      "label": "准备合法入向引用",
+      "sublabel": "固定身份，保留草稿和附件",
+      "width": 194
+    },
+    {
+      "id": "open-target",
+      "lane": "session",
+      "col": 3,
+      "type": "backend",
       "label": "进入真实接收会话",
-      "sublabel": "准备引用并保留草稿",
-      "width": 170
+      "sublabel": "准备失败不跳过校验",
+      "width": 194
     },
     {
       "id": "send",
-      "lane": "main",
+      "lane": "session",
       "col": 4,
       "type": "backend",
-      "label": "用户发送与按需读取",
-      "sublabel": "记录实际披露和状态",
-      "width": 170
+      "label": "用户发送并按需读取",
+      "sublabel": "图不另起模型执行器",
+      "width": 194
+    },
+    {
+      "id": "record",
+      "lane": "maintenance",
+      "col": 4,
+      "type": "backend",
+      "label": "记录披露位置",
+      "sublabel": "交付状态、计数和继续位置",
+      "width": 194
+    },
+    {
+      "id": "inspect",
+      "lane": "main",
+      "col": 5,
+      "type": "backend",
+      "label": "按需查看或管理来源",
+      "sublabel": "授权、窗口、保留、历史分列",
+      "width": 194
     },
     {
       "id": "unsupported",
       "lane": "exception",
-      "col": 2,
+      "col": 3,
       "type": "external",
-      "label": "能力或来源不可用",
-      "sublabel": "明确禁用或重试，不改读最新",
-      "width": 170
+      "label": "拒绝并给出核对/重试",
+      "sublabel": "缺能力或固定版本不可用",
+      "width": 194
+    },
+    {
+      "id": "pending",
+      "lane": "exception",
+      "col": 1,
+      "type": "external",
+      "label": "未绑定仅保存意图",
+      "sublabel": "明确开始才选工作区创建",
+      "width": 194
     }
   ],
   "edges": [
@@ -80,23 +155,77 @@
     {
       "id": "e1",
       "from": "card",
-      "to": "connect"
+      "to": "connect",
+      "label": "已绑定且可确认来源"
     },
     {
       "id": "e2",
       "from": "connect",
-      "to": "enter"
+      "to": "authorize",
+      "label": "add-reference"
+    },
+    {
+      "id": "fixed-source",
+      "from": "authorize",
+      "to": "freeze",
+      "label": "服务端固定版本/截止"
+    },
+    {
+      "id": "ready",
+      "from": "freeze",
+      "to": "enter",
+      "label": "权威关系可用"
     },
     {
       "id": "e3",
       "from": "enter",
+      "to": "prepare",
+      "label": "open-session + 引用ID"
+    },
+    {
+      "id": "open-after-prepare",
+      "from": "prepare",
+      "to": "open-target",
+      "label": "准备成功"
+    },
+    {
+      "id": "user-send",
+      "from": "open-target",
       "to": "send"
+    },
+    {
+      "id": "disclose-log",
+      "from": "send",
+      "to": "record",
+      "label": "服务按实际披露记录"
+    },
+    {
+      "id": "read-status",
+      "from": "record",
+      "to": "inspect",
+      "label": "按需分页"
     },
     {
       "id": "unsupported-in",
       "from": "connect",
       "to": "unsupported",
-      "label": "能力或来源不可用",
+      "label": "能力/来源不可用",
+      "role": "branch",
+      "variant": "dashed"
+    },
+    {
+      "id": "prepare-failed",
+      "from": "prepare",
+      "to": "unsupported",
+      "label": "准备拒绝/不确定",
+      "role": "branch",
+      "variant": "dashed"
+    },
+    {
+      "id": "unbound",
+      "from": "card",
+      "to": "pending",
+      "label": "空卡片/待绑定连接",
       "role": "branch",
       "variant": "dashed"
     }
@@ -105,16 +234,53 @@
     "open",
     "card",
     "connect",
+    "authorize",
+    "freeze",
     "enter",
-    "send"
+    "prepare",
+    "open-target",
+    "send",
+    "record",
+    "inspect"
   ],
   "semanticChecks": {
     "allowedRoots": [
       "open"
     ],
     "allowedTerminals": [
-      "send",
-      "unsupported"
+      "inspect",
+      "unsupported",
+      "pending"
     ]
-  }
+  },
+  "groups": [
+    {
+      "id": "graph-edit",
+      "label": "主干与连接编辑",
+      "lane": "main",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "maintenance-scope",
+      "label": "权威来源与记录",
+      "lane": "maintenance",
+      "fromCol": 2,
+      "toCol": 4
+    },
+    {
+      "id": "reference-actions",
+      "label": "统一引用动作",
+      "lane": "core",
+      "fromCol": 2,
+      "toCol": 3
+    },
+    {
+      "id": "native-conversation",
+      "label": "原生问答",
+      "lane": "session",
+      "fromCol": 3,
+      "toCol": 4
+    }
+  ]
 }

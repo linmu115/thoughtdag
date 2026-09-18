@@ -16,7 +16,8 @@
     "docs:preview": "vitepress preview docs",
     "desktop": "npm run build && cd desktop && electron .",
     "cli:build": "esbuild cli/src/main.ts --bundle --platform=node --format=esm --target=node20 --define:import.meta.env={} --outfile=cli/dist/thoughtdag.mjs --log-level=warning",
-    "dsh:build": "node dsh/scripts/build.mjs ."
+    "dsh:build": "node dsh/scripts/build.mjs .",
+    "test:ownership": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",
@@ -57,6 +58,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@linmu/dsh-session-contracts": "file:../../worktrees/session-context-graph-20260913/dsh-session-maintenance/packages/contracts",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -68,12 +70,13 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^26.1.0",
     "playwright-core": "^1.61.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
     "vitepress": "^1.6.4",
-    "@linmu/dsh-session-contracts": "file:../../worktrees/session-context-graph-20260913/dsh-session-maintenance/packages/contracts"
+    "vitest": "^4.1.8"
   },
   "description": "An infinite canvas where LLM conversations grow into an editable thought graph. Read papers into maps; every answer knows where it came from.",
   "repository": {

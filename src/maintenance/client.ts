@@ -4,7 +4,7 @@ export type Status = { protocolVersion: 2; mode: 'maintenance'; capabilities: { 
 export type Page<T> = { items: T[]; nextCursor?: string | null }
 export type DirectoryItem = { id: string; title: string; logicalSessionId?: string }
 export type SessionIdentity = { logicalSessionId: string; nativeSessionId: string; title: string }
-export type Capture = { sourceSessionId: string; anchorId: string; messageId?: string; role: 'assistant'; occurrence: 0; selectedText: string; expectedSourceVersionId?: string }
+export type Capture = { sourceSessionId: string; anchorId: string; messageId?: string; role: 'assistant'; occurrence: number; selectedText: string; expectedSourceVersionId?: string }
 export type Preview = { logicalSessionId: string; nativeSessionId: string; sourceVersionId: string; items: { eventId: string; role: 'user' | 'assistant'; text: string; offset: number; complete: boolean }[]; capture?: Capture; nextCursor?: string | null; hasMore: boolean }
 export type ExtensionObject = { objectId: string; title: string; revision: number; deleted: boolean; scope: { namespace: string }; schemaVersion: number; content?: { schemaVersion: number; title: string; body: unknown; references?: { logicalSessionId: string; messageId?: string }[] } }
 export type ExtensionDetail = { object: ExtensionObject }
@@ -68,7 +68,7 @@ type ParentInputs = {
   'add-reference': { targetSessionId: string; capture: Capture; operationId: string }
   'delete-reference': { nativeSessionId: string; referenceId: string }
   'open-object': { namespace: string; objectId: string }
-  'session-sticker': { capture?: Capture }
+  'stage-reference': { targetSessionId: string; capture: Capture; operationId: string }
 }
 type ParentRequestArgs = { [Operation in keyof ParentInputs]: [operation: Operation, input: ParentInputs[Operation]] }[keyof ParentInputs]
 

@@ -1,31 +1,22 @@
 ---
 id: IF-integration
 kind: interface
-title: 画布怎样调用两个权威服务
+title: 画布与外部服务的协作入口
 status: current
-summary: 图操作交给 Maintenance；引用创建和准备交给 Core，两边共享同一目标会话。
-relations:
-- relation: consumes
-  to:
-    record_id: IF-graph
-    project_id: 0d05f813-7097-47d9-9e88-3d523bb537d6
-- relation: consumes
-  to:
-    record_id: IF-native-context
-    project_id: 0d05f813-7097-47d9-9e88-3d523bb537d6
-- relation: consumes
-  to:
-    record_id: IF-reference
-    project_id: dd46311f-d98d-49ff-ae13-fef0a8a6f9c3
+summary: 细分图存储、原生上下文、统一引用和对象导航，完整合同留给各提供方。
 sources:
-- file: ../../dsh/MANAGED.md
-- file: ../changes/2026-09-15-native-context-ui.md
+- path: ../../dsh/MANAGED.md
+- path: ../../dsh/lib/managed-graph.js
+- path: ../../dsh/lib/client.js
 ---
 
-# 画布怎样调用两个权威服务
+# 画布与外部服务的协作入口
 
-用户拖出 X → Y 后，画布交付来源、接收方与完成位置。Maintenance/Adapter 解析固定版本、检查归属及修订；Core 创建或准备统一引用。进入 Y 时保留原草稿和附件，用户自行发送。
+ThoughtDAG 负责把卡片、连线和用户操作组织为当前会话的图。它通过 [[IF-host-bridge|本插件宿主桥接]]使用不同服务：
 
-客户端不接受随意覆盖 owner、run、instance 等身份。写入必须匹配图协议及引用能力；旧组合明确禁用，不能走通用保存旁路。源版本不可用时明确失败，不改成读取最新版本。
+- [[IF-maintenance-consumer|Maintenance 接入说明]]：唯一主干、图领域写入、固定版本/读取位置、原生上下文、有限对象目录与工作区创建。
+- [[IF-suite-consumer|Annotation、贴纸与笔记接入说明]]：创建/准备/清理统一引用、打开会话贴纸和已有对象。
 
-删除调用同一后端命令，撤销后自动核对权威图；撤销成功但草稿清理失败要提供重试，不把局部 UI 成功当作全链路完成。
+原有 IF-integration 身份继续作为协作总入口；原来集中于这里的消费声明移到对应接入说明。没有把两个提供方合为本项目内部模块。
+
+修改字段或行为前，核对提供方合同及本插件调用点；共享 DTO 包的导入只说明类型依赖，不证明调用全部能力，也不证明当前实例已经安装启用。

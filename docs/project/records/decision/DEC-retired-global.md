@@ -5,6 +5,10 @@ title: 已移除的全局网络与局部问答区
 status: retired
 summary: DSH 全局网络、影响查看和准备重答已移除，不能回填为待做功能。
 sources:
+- provider: codex
+  thread_id: 01a08a9d-25fc-7ae0-ab58-205cf1448e10
+  message_id: msg_01a0a084-f80d-74e2-bc7a-cfbfec079c7d
+  line: 8872
 - file: ../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-14-session-graph-feature-scope-audit.md
 - file: ../../dsh/MANAGED.md
 ---

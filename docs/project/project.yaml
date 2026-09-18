@@ -97,6 +97,27 @@ bindings:
   heading: 开发验证
   status: current
   summary: 模型、桥接、构建和合成浏览器命令及其范围。
+- id: REQ-remove
+  kind: requirement
+  title: 移除、撤销和刷新
+  source_id: source-1
+  heading: 5.4 移除、撤销和刷新
+  status: current
+  summary: 同一领域命令撤销连接；保留历史与真实对象，刷新不能复活已撤销关系。
+- id: REQ-storage
+  kind: requirement
+  title: 图的轻量存储边界
+  source_id: source-1
+  heading: 5.6 轻量存储边界
+  status: current
+  summary: 保存结构和必要短摘录；正文回真源读取，图与日志分别更新。
+- id: REQ-adapter
+  kind: requirement
+  title: 图与业务扩展适配同步
+  source_id: source-1
+  heading: 7.1 Maintenance Adapter 必须同步交付
+  status: current
+  summary: 图schema、归属和生命周期变化需要配套业务扩展适配；提供方合同留在Maintenance。
 archify:
   architecture:
     source: diagrams/architecture.json
@@ -104,27 +125,76 @@ archify:
       user:
       - IMP-usage
       managed:
-      - MOD-managed
+      - MOD-canvas
+      - REQ-main
       context:
+      - MOD-source-reading
       - MOD-context
+      - OBJ-context-state
       bridge:
-      - IF-integration
+      - MOD-host-server
+      - IF-host-bridge
       maintenance:
-      - IF-capability
+      - IF-maintenance-consumer
+      - REQ-adapter
       core:
-      - IF-integration
+      - IF-suite-consumer
+      shell:
+      - MOD-host-shell
+      - REQ-presentation
+      host-client:
+      - MOD-host-shell
+      - IF-host-bridge
+      state:
+      - MOD-graph-state
+      - OBJ-main
+      preview:
+      - MOD-source-reading
+      - REQ-disclosure
+      extension:
+      - IF-maintenance-consumer
+      - REQ-storage
+      native-api:
+      - IF-maintenance-consumer
+      - REQ-context-ui
   workflow:
     source: diagrams/workflow.json
     node_records:
       open:
       - REQ-main
+      - MOD-canvas
       card:
       - OBJ-main
+      - REQ-create
       connect:
-      - IF-integration
+      - IF-suite-consumer
+      - REQ-create
       enter:
+      - MOD-canvas
       - IMP-usage
       send:
+      - IMP-usage
       - REQ-disclosure
       unsupported:
+      - IF-host-bridge
       - IF-capability
+      authorize:
+      - IF-suite-consumer
+      freeze:
+      - IF-maintenance-consumer
+      - OBJ-context-state
+      prepare:
+      - IF-suite-consumer
+      - MOD-host-shell
+      open-target:
+      - MOD-host-shell
+      - IMP-usage
+      record:
+      - REQ-disclosure
+      - IF-maintenance-consumer
+      inspect:
+      - MOD-source-reading
+      - OBJ-context-state
+      pending:
+      - OBJ-main
+      - REQ-create

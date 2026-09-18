@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core'
 import { apply } from '../lib/managed-entry.js'
 const output = resolve(process.argv[2] ?? '.local-e2e/main-graph-browser')
 await mkdir(output, { recursive: true })
+const sessionStickers = new Map();
 const docs = new Map(), refs = [], calls = [], routes = [], previews = [], created = new Map()
 let conflictNext = false, headVersion = 'version-1', sequence = 0
 const identities = [{ logicalSessionId: 'source', nativeSessionId: 'native-source', title: '来源讨论 X' }, { logicalSessionId: 'target', nativeSessionId: 'native-target', title: '接收会话 Y' }]
@@ -71,14 +72,26 @@ const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>
 #fixture-tabs{margin-top:10px}#fixture-content{padding:24px}textarea{display:block;width:90%;margin-top:24px}
 @media(max-width:760px){:root{--fixture-sidebar:0px}#fixture-nav{padding:0;visibility:hidden}#fixture-title{width:100px}}
 </style></head><body><div id="fixture-layout"><aside id="fixture-nav">会话工作区</aside><main id="fixture-main"><header id="fixture-header"><div id="fixture-title-row"><span id="fixture-title">来源讨论 X</span><div id="toolbar"></div></div><div id="fixture-tabs">对话　轨迹</div></header><section id="fixture-content">完整会话页<textarea aria-label="合成草稿">保留原有草稿</textarea></section></main></div><script>
-window.fixture={current:'native-source',draft:'保留原有草稿',attachments:['保留附件'],actions:[]};
+window.fixture={selectionActions:{},current:'native-source',draft:'保留原有草稿',attachments:['保留附件'],actions:[]};
 const sessions={list:{getSnapshot:()=>({current:fixture.current,byId:{[fixture.current]:{displayTitle:fixture.current}}}),subscribe:fn=>{fixture.onSessionsChanged=fn;return()=>{fixture.onSessionsChanged=null}}},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})}};
-const core={features:['graph-reference-actions-v1','session-main-graph-v2'],prepareGraphReferences:async(target,referenceIds)=>{fixture.actions.push({operation:'prepare',target,referenceIds});return{preparedCount:referenceIds.length}},addCrossSessionReference:async(target,capture,options)=>{const r=await fetch('/fixture/reference',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target,capture,options})});fixture.current=target;fixture.actions.push({operation:'reference',target,capture});return r.json()},resolveReferenceLink:async(target,referenceId)=>({setId:'set',referenceId,state:'pending'}),deleteReferenceLink:async(target,setId,referenceId)=>{fixture.actions.push({operation:'delete-reference',target,referenceId});return{deleted:true}}};
+const core={registerSelectionAction:action=>{fixture.selectionActions[action.id]=action;return()=>delete fixture.selectionActions[action.id]},features:['native-selection-actions-v1','graph-reference-actions-v1','session-main-graph-v2'],prepareGraphReferences:async(target,referenceIds)=>{fixture.actions.push({operation:'prepare',target,referenceIds});return{preparedCount:referenceIds.length}},addCrossSessionReference:async(target,capture,options)=>{const r=await fetch('/fixture/reference',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target,capture,options})});fixture.current=target;fixture.actions.push({operation:'reference',target,capture});return r.json()},resolveReferenceLink:async(target,referenceId)=>({setId:'set',referenceId,state:'pending'}),deleteReferenceLink:async(target,setId,referenceId)=>{fixture.actions.push({operation:'delete-reference',target,referenceId});return{deleted:true}}};
 const react={useState:value=>[value,()=>{}],useEffect:fn=>fn(),createElement:(tag,props,...children)=>{const el=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='onClick')el.onclick=v;else if(k==='className')el.className=v;else if(v!==undefined)el.setAttribute(k,v)}for(const c of children.flat())el.append(c instanceof Node?c:String(c));return el}};
-window.__ModuleLoader__={load:mod=>mod.factory(()=>react).apply({sessions,get:name=>name==='annotationCore'?core:undefined,effect:fn=>fn(),slots:{inject:(_name,fn)=>fn(),register:(_meta,C)=>{document.querySelector('#toolbar').append(C());return()=>{}}}})};
+window.__ModuleLoader__={load:mod=>mod.factory(()=>react).apply({inject:(deps,fn)=>{if(deps.includes('annotationCore'))fn({get:()=>core,effect:fn=>fn()});return{dispose(){}}},sessions,get:name=>name==='annotationCore'?core:undefined,effect:fn=>fn(),slots:{inject:(_name,fn)=>fn(),register:(_meta,C)=>{document.querySelector('#toolbar').append(C());return()=>{}}}})};
 </script><script src="/client.js"></script></body></html>`
 const server = createServer(async (req, res) => {
   if (req.url === '/') { res.writeHead(200, { 'content-type': 'text/html;charset=utf-8' }); return res.end(parentHtml) }
+  if (req.url.startsWith('/maintenance-knowledge/api/')) {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk); const input = JSON.parse(Buffer.concat(chunks).toString());
+    const operation = req.url.split('/').at(-1); let value;
+    if (operation === 'list') value = { items: [...sessionStickers.values()].filter(row => input.deleted === 'deleted' ? row.deleted : !row.deleted), nextCursor: null };
+    else if (operation === 'directory') value = await graph.directory(input.workspaceId);
+    else if (operation === 'resolve') value = await graph.resolve(input);
+    else if (operation === 'preview') value = await graph.preview(input.logicalSessionId, undefined, { sourceVersionId: input.sourceVersionId, sourceAnchorId: input.sourceAnchorId });
+    else if (operation === 'get') value = sessionStickers.get(input.objectId);
+    else if (operation === 'write') { const old = sessionStickers.get(input.objectId); const object = { objectId: input.objectId, revision: (old?.revision ?? 0) + 1, deleted: input.deleted ?? false, scope: { namespace: 'stickers' }, content: { title: input.title, body: input.body } }; sessionStickers.set(input.objectId, object); value = { status: 'committed', object }; }
+    else value = { items: [], nextCursor: null };
+    res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(value));
+  }
   if (req.url === '/client.js') { res.writeHead(200, { 'content-type': 'text/javascript' }); return res.end(await readFile(new URL('../lib/client.js', import.meta.url))) }
   if (req.url === '/fixture/reference') {
     const chunks = []; for await (const part of req) chunks.push(part); const input = JSON.parse(Buffer.concat(chunks).toString())
@@ -239,5 +252,26 @@ try {
   await app.getByRole('button', { name: '保留布局副本并重新载入', exact: true }).click(); await app.getByText('本地布局已另存', { exact: false }).waitFor()
   checks.push('node context deletion retains real session; revision conflict preserves local layout and supports a separate recovery draft')
   await page.setViewportSize({ width: 390, height: 844 }); await alignment('narrow host aligns both frame edges and keeps view switch fixed'); await app.getByRole('button', { name: '主干导航', exact: true }).click(); await app.getByRole('button', { name: '当前会话的主干', exact: true }).waitFor(); await page.screenshot({ path: resolve(output, 'mobile-navigation.png'), animations: 'disabled' }); await page.keyboard.press('Escape'); await menu(); await page.screenshot({ path: resolve(output, 'mobile-menu.png'), animations: 'disabled' }); const bounds = await app.getByRole('menu').boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391); assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 845); await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1100, height: 850 }); await page.goto(origin);
+  await page.waitForFunction(() => !!window.fixture.selectionActions['thoughtdag.reference']);
+  await page.evaluate(() => fixture.selectionActions['thoughtdag.reference'].run({ sourceSessionId: 'native-source', anchorId: 'answer-1', messageId: 'answer-1', selectedText: '减少训练显存', role: 'assistant', occurrence: 0 }));
+  const ownershipFrame = page.frameLocator('iframe');
+  await ownershipFrame.getByRole('dialog', { name: '引用到会话', exact: true }).waitFor();
+  await ownershipFrame.getByRole('dialog', { name: '引用到会话', exact: true }).getByRole('button', { name: '关闭', exact: true }).click();
+  checks.push('native cross-session action opens the graph-owned picker without Sidechat or Better Sidebar');
+  await page.locator('.dsh-td-canvas-switch').getByRole('button', { name: '对话', exact: true }).click();
+  await page.evaluate(() => fixture.selectionActions['thoughtdag.session-sticker'].run({ sourceSessionId: 'native-source', anchorId: 'answer-1', messageId: 'answer-1', selectedText: '减少训练显存', role: 'assistant', occurrence: 0 }));
+  const panel = ownershipFrame.getByRole('dialog', { name: '会话贴纸', exact: true }); await panel.waitFor();
+  await panel.getByRole('button', { name: '合成测试工作区', exact: true }).click();
+  await panel.getByRole('button', { name: '接收会话 Y', exact: true }).click();
+  await panel.getByText('会话贴纸已建立，引用已加入目标会话输入框，发送后参与回答。', { exact: true }).waitFor();
+  assert.equal(sessionStickers.size, 1); const sticker = [...sessionStickers.values()][0]; assert.equal(sticker.content.body.source.sourceVersionId, headVersion);
+  await page.screenshot({ path: resolve(output, 'session-stickers-in-map.png'), fullPage: true });
+  await panel.getByRole('button', { name: '删除对象', exact: true }).click();
+  await panel.getByRole('button', { name: '已删除', exact: true }).click();
+  await panel.getByRole('button', { name: '恢复对象', exact: true }).click();
+  await panel.getByRole('button', { name: '全部贴纸', exact: true }).click();
+  await panel.getByRole('button', { name: '接收会话 Y', exact: true }).waitFor();
+  checks.push('graph owns session sticker creation, fixed source, deletion and restoration without Sticker Board');
   assert.deepEqual(errors, []); await writeFile(resolve(output, 'result.json'), JSON.stringify({ userData: false, modelCalls: 0, checks, errors, references: refs.map(r => ({ referenceId: r.referenceId, state: r.state })), nativeCreates: created.size }, null, 2)); console.log(JSON.stringify({ output, checks: checks.length, errors }))
 } catch (error) { await page.screenshot({ path: resolve(output, 'failure.png') }); await writeFile(resolve(output, 'failure.txt'), error.stack + '\n' + JSON.stringify({calls,refs,previews,checks,errors})); throw error } finally { await browser.close(); server.close(); await once(server, 'close') }

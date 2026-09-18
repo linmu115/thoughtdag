@@ -1,0 +1,275 @@
+{
+  "as_of": "2026-09-16",
+  "scope": "地图资产；独立产品报告保留原版本范围",
+  "map": {
+    "project_id": "9b066b81-bb0e-4c2a-b528-56c24499f886",
+    "record_count": 34,
+    "valid": true,
+    "errors": [],
+    "warnings": [],
+    "scope": "Declared sources and owned records only; external targets are not traversed."
+  },
+  "external_targets": [
+    {
+      "project_id": "0d05f813-7097-47d9-9e88-3d523bb537d6",
+      "record_id": "IF-graph",
+      "manifest": "D:\\AI\\DeepSeekHarness-Plugin\\worktrees\\session-context-graph-20260913\\dsh-session-maintenance\\docs\\project\\project.yaml",
+      "target_path": "records\\interface\\IF-graph.md"
+    },
+    {
+      "project_id": "0d05f813-7097-47d9-9e88-3d523bb537d6",
+      "record_id": "IF-extension",
+      "manifest": "D:\\AI\\DeepSeekHarness-Plugin\\worktrees\\session-context-graph-20260913\\dsh-session-maintenance\\docs\\project\\project.yaml",
+      "target_path": "records\\interface\\IF-extension.md"
+    },
+    {
+      "project_id": "0d05f813-7097-47d9-9e88-3d523bb537d6",
+      "record_id": "IF-native-context",
+      "manifest": "D:\\AI\\DeepSeekHarness-Plugin\\worktrees\\session-context-graph-20260913\\dsh-session-maintenance\\docs\\project\\project.yaml",
+      "target_path": "records\\interface\\IF-native-context.md"
+    },
+    {
+      "project_id": "dd46311f-d98d-49ff-ae13-fef0a8a6f9c3",
+      "record_id": "IF-core-client",
+      "manifest": "D:\\AI\\DeepSeekHarness-Plugin\\worktrees\\session-context-graph-20260913\\dsh-obsidian-session-reference-suite\\docs\\project\\project.yaml",
+      "target_path": "records\\modules\\annotation-core\\interfaces\\client.md"
+    }
+  ],
+  "markdown_file_links": [
+    {
+      "file": "records\\modules\\managed\\host\\bridge-contract.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\src\\maintenance\\client.ts",
+      "exists": true
+    },
+    {
+      "file": "records\\modules\\managed\\host\\bridge-contract.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\dsh\\lib\\client.js",
+      "exists": true
+    },
+    {
+      "file": "records\\modules\\managed\\host\\bridge-contract.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\dsh\\lib\\managed-graph.js",
+      "exists": true
+    },
+    {
+      "file": "records\\modules\\managed\\integrations\\maintenance.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\dsh\\lib\\managed-graph.js",
+      "exists": true
+    },
+    {
+      "file": "records\\modules\\managed\\integrations\\maintenance.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\src\\maintenance\\client.ts",
+      "exists": true
+    },
+    {
+      "file": "records\\modules\\managed\\integrations\\suite.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\dsh\\lib\\client.js",
+      "exists": true
+    },
+    {
+      "file": "records\\verification\\VER-product-evidence.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\changes\\2026-09-15-current-session-names.md",
+      "exists": true
+    },
+    {
+      "file": "records\\verification\\VER-product-evidence.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\changes\\2026-09-15-sliding-view-selector.md",
+      "exists": true
+    },
+    {
+      "file": "records\\verification\\VER-product-evidence.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\changes\\2026-09-15-drag-flicker.md",
+      "exists": true
+    },
+    {
+      "file": "records\\verification\\VER-product-evidence.md",
+      "target": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\changes\\2026-09-15-native-context-ui.md",
+      "exists": true
+    }
+  ],
+  "native": {
+    "architecture": {
+      "ok": true,
+      "composition": {
+        "schemaVersion": 1,
+        "profile": "standard",
+        "status": "pass",
+        "summary": {
+          "errors": 0,
+          "warnings": 1
+        },
+        "metrics": {
+          "properCrossings": 1,
+          "ambiguousCorridors": 0,
+          "containerBorderRuns": 0,
+          "labelRouteClearanceIssues": 0,
+          "minLabelRouteClearance": 6,
+          "desktopReadabilityIssues": 0,
+          "minProjectedNodeTextPx": null,
+          "maxBends": 3,
+          "routesOverSuggestedBends": 2,
+          "maxStretch": 1.588,
+          "routesOverSuggestedStretch": 2,
+          "minSegmentPx": 35,
+          "minInteriorSegmentPx": 116,
+          "shortSegmentCount": 0,
+          "shortEndpointSegmentCount": 0,
+          "shortInteriorSegmentCount": 0,
+          "microSegmentCount": 0
+        },
+        "suggestedLimits": {
+          "bendsPerRelationship": 2,
+          "stretch": 1.35,
+          "segmentPx": 16,
+          "microSegmentPx": 8
+        },
+        "issues": [
+          {
+            "severity": "warning",
+            "code": "composition/proper-crossing",
+            "relationship": {
+              "id": "c2",
+              "from": "managed",
+              "to": "bridge",
+              "label": "图领域操作",
+              "collectionIndex": 3,
+              "artifactIndex": 4
+            },
+            "otherRelationship": {
+              "id": "preview-host",
+              "from": "preview",
+              "to": "host-client",
+              "label": "选文引用/贴纸/导航",
+              "collectionIndex": 10,
+              "artifactIndex": 11
+            },
+            "point": [
+              660,
+              424
+            ]
+          }
+        ]
+      },
+      "source": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\project\\diagrams\\architecture.json"
+    },
+    "workflow": {
+      "ok": true,
+      "composition": {
+        "schemaVersion": 1,
+        "profile": "standard",
+        "status": "pass",
+        "summary": {
+          "errors": 0,
+          "warnings": 2
+        },
+        "metrics": {
+          "properCrossings": 1,
+          "ambiguousCorridors": 0,
+          "containerBorderRuns": 0,
+          "labelRouteClearanceIssues": 0,
+          "minLabelRouteClearance": 4.6,
+          "desktopReadabilityIssues": 1,
+          "minProjectedNodeTextPx": 5.589782118707738,
+          "maxBends": 4,
+          "routesOverSuggestedBends": 7,
+          "maxStretch": 9.845,
+          "routesOverSuggestedStretch": 2,
+          "minSegmentPx": 16,
+          "minInteriorSegmentPx": 47,
+          "shortSegmentCount": 0,
+          "shortEndpointSegmentCount": 0,
+          "shortInteriorSegmentCount": 0,
+          "microSegmentCount": 0
+        },
+        "suggestedLimits": {
+          "bendsPerRelationship": 2,
+          "stretch": 1.35,
+          "segmentPx": 16,
+          "microSegmentPx": 8
+        },
+        "issues": [
+          {
+            "severity": "warning",
+            "code": "composition/proper-crossing",
+            "relationship": {
+              "id": "ready",
+              "from": "freeze",
+              "to": "enter",
+              "label": "权威关系可用",
+              "collectionIndex": 9,
+              "artifactIndex": 10
+            },
+            "otherRelationship": {
+              "id": "unsupported-in",
+              "from": "connect",
+              "to": "unsupported",
+              "label": "能力/来源不可用",
+              "collectionIndex": 11,
+              "artifactIndex": 12
+            },
+            "point": [
+              766.4,
+              243
+            ]
+          },
+          {
+            "severity": "warning",
+            "code": "composition/desktop-readability",
+            "viewportWidth": 1440,
+            "viewportHeight": 900,
+            "availableDiagramWidth": 930,
+            "viewBoxWidth": 1331,
+            "scale": 0.6987227648384673,
+            "text": "按当前会话ensure后复用",
+            "detail": "context",
+            "sourceFontPx": 8,
+            "projectedFontPx": 5.589782118707738,
+            "minimumProjectedFontPx": 6
+          }
+        ]
+      },
+      "source": "D:\\AI\\DeepSeekHarness-Plugin\\repositories\\thoughtdag\\docs\\project\\diagrams\\workflow.json"
+    }
+  },
+  "preserved_ids": {
+    "record_id": "MOD-managed",
+    "old_path": "records/module/MOD-managed.md",
+    "new_path": "records/modules/managed/overview.md",
+    "note": "所有旧记录ID和旧图节点/边ID保留；原本概览交接拆到负责子模块。"
+  },
+  "stable_ids": {
+    "old_record_count": 19,
+    "current_record_count": 34,
+    "all_original_record_ids_preserved": true,
+    "native": {
+      "architecture": {
+        "original_nodes": 6,
+        "current_nodes": 12,
+        "original_edges": 6,
+        "current_edges": 14,
+        "all_original_ids_preserved": true
+      },
+      "workflow": {
+        "original_nodes": 6,
+        "current_nodes": 13,
+        "original_edges": 5,
+        "current_edges": 13,
+        "all_original_ids_preserved": true
+      }
+    }
+  },
+  "browser_spot_check": {
+    "browser": "Codex in-app browser",
+    "date": "2026-09-16",
+    "passed": [
+      "HTTP阅读页加载",
+      "A概览、架构和流程画面",
+      "B模式及插件子模块目录展开",
+      "更新记录为空且没有连续文档入口"
+    ],
+    "limits": [
+      "未逐个点击全部节点或所有链接",
+      "完整图缩放后的细节检查不等于产品运行验收"
+    ]
+  }
+}

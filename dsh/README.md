@@ -17,7 +17,7 @@
 | Maintenance 插件 / Engine | 0.2.26-rc2.22 / 0.1.33-rc2.26 | 稳定会话身份、图协议 2、固定源读取、撤销与归档 |
 | Annotation Core | 0.3.12-rc2.12 | 统一引用准备、发送状态和已发送引用恢复 |
 | ThoughtDAG | 0.4.14-rc2.13 | 主干图 UI 与原生会话入口 |
-| Session Sticker Board | 0.7.3-rc2.18 | 会话贴纸及来源蓝色引用入口；使用这些入口时需要 |
+| Session Sticker Board | 0.7.3-rc2.19 | 可选；普通贴纸及其 Obsidian 双向链接 |
 
 所有服务必须指向同一 DSH 实例。Obsidian 笔记关联还需要配套 Lifecycle、Reference Adapter 与 Vault 伴侣插件；基础主干图不要求打开 Obsidian。组件以实际能力检查为准，缺少协议或版本不匹配时会显示错误，不回落到旧写入接口。
 
@@ -96,3 +96,9 @@ X → Y 的引用属于 **Y 的主干**。自动布局让 X 位于 Y 上方，�
 - [整组删除、归档与恢复验收](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md)
 
 上述记录区分合成测试、实际副本安装和业务操作。源码推送及公网包发布需要各自完成，不能用本地验收结果替代。
+
+## 划选与会话贴纸归属
+
+0.4.14-rc2.14 向 Core 的原生菜单注册「跨会话引用」「会话贴纸」。目标选择和会话贴纸的创建、列表、删除恢复在思维图完成，不依赖 Sidechat 或 Sticker Board；蓝色来源标记也由本插件安装。新菜单要求 Core 0.3.12-rc2.19 的 native-selection-actions-v1。Core 仍负责引用状态、输入框和提交，Maintenance 仍保存真源。
+
+引用到目标会话会进入目标输入框，等待用户发送；建立会话贴纸的引用准备不关闭图内面板。来源预览版本、消息身份和重复选文位置完整保留。会话贴纸沿用原 stickers 命名空间及对象身份。普通贴纸旧数据迁移仍在 Sticker Board 的「贴纸与笔记链接」中。

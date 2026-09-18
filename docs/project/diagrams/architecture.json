@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "ThoughtDAG · DSH 会话主干图 · 职责与数据归属",
+    "title": "ThoughtDAG 受管插件 · 内部职责与外部接口",
     "locale": "zh-CN"
   },
   "components": [
@@ -10,28 +10,84 @@
       "id": "user",
       "type": "external",
       "label": "真实 DSH 会话",
-      "sublabel": "用户问题 · 草稿 · 附件",
+      "sublabel": "草稿 · 附件 · 用户发送",
       "pos": [
-        60,
+        40,
         100
       ],
       "size": [
-        200,
-        84
+        230,
+        88
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "frontend",
+      "label": "会话外壳",
+      "sublabel": "切换 · 主题 · iframe复用",
+      "pos": [
+        360,
+        100
+      ],
+      "size": [
+        230,
+        88
       ]
     },
     {
       "id": "managed",
       "type": "frontend",
-      "label": "ManagedGraphApp",
-      "sublabel": "主干 · 布局 · 右键操作",
+      "label": "画布编辑",
+      "sublabel": "目录 · 卡片 · 连接确认",
       "pos": [
-        400,
+        720,
         100
       ],
       "size": [
-        200,
-        84
+        230,
+        88
+      ]
+    },
+    {
+      "id": "state",
+      "type": "frontend",
+      "label": "图模型与合并",
+      "sublabel": "布局 · 修订 · 恢复草稿",
+      "pos": [
+        1090,
+        100
+      ],
+      "size": [
+        230,
+        88
+      ]
+    },
+    {
+      "id": "host-client",
+      "type": "frontend",
+      "label": "宿主客户端",
+      "sublabel": "当前会话 · 导航 · Core动作",
+      "pos": [
+        360,
+        380
+      ],
+      "size": [
+        230,
+        88
+      ]
+    },
+    {
+      "id": "preview",
+      "type": "frontend",
+      "label": "来源预览与披露",
+      "sublabel": "固定分页 · 选文 · 读取位置",
+      "pos": [
+        720,
+        380
+      ],
+      "size": [
+        230,
+        88
       ]
     },
     {
@@ -40,54 +96,82 @@
       "label": "来源上下文面板",
       "sublabel": "请求目录 · 窗口 · 保留",
       "pos": [
-        740,
-        100
+        1090,
+        380
       ],
       "size": [
-        200,
-        84
+        230,
+        88
       ]
     },
     {
       "id": "bridge",
       "type": "backend",
-      "label": "当前会话桥接",
-      "sublabel": "固定身份 · 同源调用",
+      "label": "同源服务器桥接",
+      "sublabel": "输入校验 · 当前实例 · 分派",
       "pos": [
-        400,
-        360
+        720,
+        680
       ],
       "size": [
-        200,
-        84
-      ]
-    },
-    {
-      "id": "maintenance",
-      "type": "database",
-      "label": "Maintenance",
-      "sublabel": "图 · 版本 · 回执",
-      "pos": [
-        60,
-        600
-      ],
-      "size": [
-        200,
-        84
+        230,
+        88
       ]
     },
     {
       "id": "core",
       "type": "external",
-      "label": "Annotation Core",
-      "sublabel": "引用 · 原生披露与释放",
+      "label": "Annotation / 贴纸 / 笔记",
+      "sublabel": "外部统一引用与对象导航",
       "pos": [
-        740,
-        600
+        40,
+        680
       ],
       "size": [
-        200,
-        84
+        230,
+        88
+      ]
+    },
+    {
+      "id": "maintenance",
+      "type": "backend",
+      "label": "图领域接口",
+      "sublabel": "IF-graph · 身份/版本/修订",
+      "pos": [
+        360,
+        1030
+      ],
+      "size": [
+        230,
+        88
+      ]
+    },
+    {
+      "id": "native-api",
+      "type": "backend",
+      "label": "原生上下文接口",
+      "sublabel": "IF-native-context · requestAsUser",
+      "pos": [
+        720,
+        1030
+      ],
+      "size": [
+        230,
+        88
+      ]
+    },
+    {
+      "id": "extension",
+      "type": "backend",
+      "label": "扩展与创建服务",
+      "sublabel": "IF-extension · 对象读取/创建",
+      "pos": [
+        1090,
+        1030
+      ],
+      "size": [
+        230,
+        88
       ]
     }
   ],
@@ -95,98 +179,271 @@
     {
       "id": "c0",
       "from": "user",
+      "to": "shell",
+      "label": "打开当前主干",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "shell-canvas",
+      "from": "shell",
       "to": "managed",
-      "label": "打开当前主干"
+      "label": "装载/复用受管图",
+      "fromSide": "right",
+      "toSide": "left"
     },
     {
       "id": "c1",
       "from": "managed",
       "to": "context",
-      "label": "选定固定来源"
+      "label": "选定来源状态",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          1030,
+          144
+        ],
+        [
+          1030,
+          424
+        ]
+      ],
+      "labelAt": [
+        1030,
+        280
+      ]
     },
     {
       "id": "c2",
       "from": "managed",
       "to": "bridge",
       "label": "图领域操作",
-      "fromSide": "bottom",
-      "toSide": "top",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          660,
+          144
+        ],
+        [
+          660,
+          724
+        ]
+      ],
       "labelAt": [
-        500,
-        272
+        650,
+        570
       ]
     },
     {
       "id": "c3",
       "from": "context",
       "to": "bridge",
-      "label": "来源状态操作",
+      "label": "原生上下文操作",
       "fromSide": "bottom",
       "toSide": "right",
       "via": [
         [
-          840,
-          260
+          1205,
+          840
         ],
         [
-          680,
-          260
+          1010,
+          840
         ],
         [
-          680,
-          402
+          1010,
+          724
         ]
       ],
       "labelAt": [
-        760,
-        248
+        1120,
+        828
       ]
     },
     {
       "id": "c4",
       "from": "bridge",
       "to": "maintenance",
-      "label": "校验归属与持久状态",
-      "fromSide": "left",
+      "label": "固定来源/归属/修订",
+      "fromSide": "bottom",
       "toSide": "top",
       "via": [
         [
-          160,
-          402
-        ]
-      ],
-      "labelAt": [
-        250,
-        390
-      ]
-    },
-    {
-      "id": "c5",
-      "from": "bridge",
-      "to": "core",
-      "label": "创建 / 准备 / 撤销引用",
-      "fromSide": "bottom",
-      "toSide": "left",
-      "via": [
+          835,
+          820
+        ],
         [
-          500,
-          642
+          475,
+          820
         ]
       ],
       "labelAt": [
         620,
-        630
+        808
+      ]
+    },
+    {
+      "id": "c5",
+      "from": "host-client",
+      "to": "core",
+      "label": "创建/准备/清理引用",
+      "fromSide": "left",
+      "toSide": "right",
+      "via": [
+        [
+          305,
+          424
+        ],
+        [
+          305,
+          724
+        ]
+      ],
+      "labelAt": [
+        300,
+        580
+      ]
+    },
+    {
+      "id": "host-lifecycle",
+      "from": "shell",
+      "to": "host-client",
+      "label": "会话/可见性/主题",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        475,
+        285
+      ]
+    },
+    {
+      "id": "canvas-state",
+      "from": "managed",
+      "to": "state",
+      "label": "结构与局部编辑",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "canvas-preview",
+      "from": "managed",
+      "to": "preview",
+      "label": "固定来源与读取位置",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        835,
+        285
+      ]
+    },
+    {
+      "id": "preview-host",
+      "from": "preview",
+      "to": "host-client",
+      "label": "选文引用/贴纸/导航",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [
+        602,
+        350
+      ]
+    },
+    {
+      "id": "preview-server",
+      "from": "preview",
+      "to": "bridge",
+      "label": "preview / disclosures",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        835,
+        560
+      ]
+    },
+    {
+      "id": "native-call",
+      "from": "bridge",
+      "to": "native-api",
+      "label": "状态/窗口/固定/释放",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        835,
+        965
+      ]
+    },
+    {
+      "id": "extension-read",
+      "from": "bridge",
+      "to": "extension",
+      "label": "对象目录/工作区/创建",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          1370,
+          724
+        ],
+        [
+          1370,
+          950
+        ],
+        [
+          1205,
+          950
+        ]
+      ],
+      "labelAt": [
+        1235,
+        938
       ]
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "阅读约定",
+      "title": "读取这张图",
       "items": [
-        "箭头标明具体交接；位置不表示运行顺序。",
-        "外部依赖用项目 ID 关联；本图不保存另一项目的全文。"
+        "框表示实际职责归属；箭头表示能力交接，不推断调用先后。",
+        "图写入走图领域接口；通用扩展仅作目录和对象读取。",
+        "平台适配和原生执行在提供方；库依赖不表示项目成员。"
       ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ThoughtDAG：受管插件内部",
+      "wraps": [
+        "shell",
+        "managed",
+        "state",
+        "host-client",
+        "preview",
+        "context",
+        "bridge"
+      ],
+      "pad": 28
+    },
+    {
+      "kind": "region",
+      "label": "Maintenance：独立提供方 · 合同唯一",
+      "wraps": [
+        "maintenance",
+        "native-api",
+        "extension"
+      ],
+      "pad": 28
+    },
+    {
+      "kind": "region",
+      "label": "DSH–Obsidian Suite：外部业务能力",
+      "wraps": [
+        "core"
+      ],
+      "pad": 22
     }
   ]
 }

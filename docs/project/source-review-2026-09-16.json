@@ -1,0 +1,117 @@
+{
+  "as_of": "2026-09-16",
+  "project_id": "9b066b81-bb0e-4c2a-b528-56c24499f886",
+  "scope": "DSH受管插件地图修订；源码有界检查，不是产品重测或部署",
+  "repository": {
+    "path": "../..",
+    "branch": "codex/rc2-maintenance-graph",
+    "commit": "7e4b0876d1249fdff8580b357955e59b496a3e27",
+    "initial_worktree_clean": true
+  },
+  "task_identity": {
+    "provider": "codex",
+    "thread_id": "01a08a9d-25fc-7ae0-ab58-205cf1448e10",
+    "title": "canvas树会话笔记联动系统",
+    "evidence": [
+      "任务预览明确魔改thoughtdag",
+      "read_thread中的编辑路径落在此仓库，最新完成链接37e6d98",
+      "dsh/package.json名称dsh-thoughtdag，origin指向linmu115/thoughtdag"
+    ]
+  },
+  "visible_user_sources": [
+    {
+      "message_id": "msg_01a0a084-f80d-74e2-bc7a-cfbfec079c7d",
+      "line": 8872,
+      "sha256": "250746a7dded086744760e477be77df85b85267caa191d3c29947853a14880ae",
+      "scope": "主干归属、轻量记录、统一撤销、已退役全局入口"
+    },
+    {
+      "message_id": "msg_01a0a2c1-db48-7d40-93d5-14e390bef503",
+      "line": 10809,
+      "sha256": "6c3f0892241046374c484c1466a5b1351a94733f9d5ae150513f3aa12e20a8ff",
+      "scope": "蓝色引用删除、归档及主干同步"
+    },
+    {
+      "message_id": "msg_01a0a384-e2b6-7211-9fbc-2e6a8ae784a2",
+      "line": 14149,
+      "sha256": "cb078434d5987a97d59774fb462c4d1fe66177069a4337487a84596dae3da9da",
+      "scope": "三层上下文、请求目录与托管引擎阶段外"
+    }
+  ],
+  "session_source": "C:/Users/19717/.codex/sessions/2026/09/14/rollout-2026-09-14T09-58-38-01a08a9d-25fc-7ae0-ab58-205cf1448e10_01a09da3-4635-7e01-b93f-cfef49319d41.jsonl",
+  "selected_sources": [
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-10-session-context-graph-requirements.md",
+      "sha256": "671d89b30fe5c68fa810fcff7da6d8a266026c5fcc0a2590500c3064f36602c9"
+    },
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-15-native-agent-context-management.md",
+      "sha256": "9aaa05d99b69ca2016549dee323ca4ed00b04ad1584513951371b0b9cf14d74f"
+    },
+    {
+      "path": "../../dsh/MANAGED.md",
+      "sha256": "ff82fbee7a6f1c26911f0b930ebbeb7db3f7af163996ea2b134cf7d332d0ec97"
+    },
+    {
+      "path": "../../dsh/README.md",
+      "sha256": "628aa80e885d5e32b311c6ce238d2113dd44889a671f5a93c8b9abbcc2467814"
+    },
+    {
+      "path": "../../dsh/lib/client.js",
+      "sha256": "30250d37348f3b2a66b3ab0bd521ac5a45c7d6f5f2e57e643d8f5864f132bdc7"
+    },
+    {
+      "path": "../../dsh/lib/managed-entry.js",
+      "sha256": "c5ecd962a91bc5ce0529d390b6e5f2b4e65aa0d2f8b93d831474bcb849b8e473"
+    },
+    {
+      "path": "../../dsh/lib/managed-graph.js",
+      "sha256": "62260917f82743a6bccaccbe6535a48ac733e063981deb62c5df96ca87b93de0"
+    },
+    {
+      "path": "../../dsh/package.json",
+      "sha256": "f06772e490c4ab7c287f78cf5b80b705cb62a9c43201d11f9664cbe3fb9f465a"
+    },
+    {
+      "path": "../../src/maintenance/DisclosurePanel.tsx",
+      "sha256": "4a7c628b8a4a6f55996e98c7f99d4ebd2425bf25bc0c2eee26104e80788b8056"
+    },
+    {
+      "path": "../../src/maintenance/ManagedGraphApp.tsx",
+      "sha256": "af612caf6bc3e4b76391f10b1a2f37ec7f169afb48f00fe78639f645d6b52514"
+    },
+    {
+      "path": "../../src/maintenance/SourceContextPanel.tsx",
+      "sha256": "56e6bbf9133d75a52032a524f888499448b662fba366e882ffbb049eb4d30f07"
+    },
+    {
+      "path": "../../src/maintenance/client.ts",
+      "sha256": "0f9efa25c957e36fbbe276f57e921f09738832d49f0ec512eff3d6edec7841e4"
+    },
+    {
+      "path": "../../src/maintenance/model.ts",
+      "sha256": "7f47143c74b4ce63b1a530a150a4b557ac958e81c751cfa6c90991e184a3efc1"
+    },
+    {
+      "path": "../../src/maintenance/sync.ts",
+      "sha256": "50c893a4a9b64a39dd663b59108b88323870433dcbbc97b6d76e7eecddbb8a6a"
+    },
+    {
+      "path": "../changes/2026-09-15-current-session-names.md",
+      "sha256": "2685a39a194a2297e34a6b6b0911fedcb03ede1db0f53e56a07398cb45cd39e3"
+    },
+    {
+      "path": "../changes/2026-09-15-drag-flicker.md",
+      "sha256": "35d7b561d64699ed6a08867ed78fe0d66f20bce54d09941e4dfdfc6f1322ac25"
+    },
+    {
+      "path": "../changes/2026-09-15-native-context-ui.md",
+      "sha256": "177520851c2ee4e54ca4b1e107bd6bb1e763775777d34a1f1c22064999a6786a"
+    },
+    {
+      "path": "../changes/2026-09-15-sliding-view-selector.md",
+      "sha256": "8af93e82c94c8847c55fa9dc03f14cfd5ff01d303eced1f9952dd1dcfdf3c88f"
+    }
+  ],
+  "preserved_baseline": "source-baseline.json"
+}

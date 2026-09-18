@@ -1,0 +1,27 @@
+---
+id: DEC-selection-ownership-20260918
+kind: decision
+title: 划选引用与会话贴纸的明确归属
+status: current
+summary: Core 拥有原生主会话划选，ThoughtDAG 拥有跨会话入口及会话贴纸，Sidechat 与普通贴纸分别贡献自己的动作。
+---
+
+# 划选引用与会话贴纸的明确归属
+
+来源：2026-09-18 用户在本任务逐项批注，明确要求将会话内引用交给 Core、跨会话引用和会话贴纸交给思维图，Sticker Board 只保留普通贴纸及 Obsidian 双向链接；Sidechat 核心行为保持。
+
+本决定替代旧文档中「Sidechat 拥有主会话划选与跨会话入口」「Sticker Board 拥有会话贴纸和蓝色来源标记」的职责描述。底层 Core / Maintenance 数据归属未变，既有对象未重建或删除。
+
+实现版本：Core 0.3.12-rc2.19、Sidechat 0.4.7-rc2.14、Sticker Board 0.7.3-rc2.19、ThoughtDAG 0.4.14-rc2.14。Core 发布 native-selection-actions-v1；各消费者注销自己的动作。普通贴纸迁移保留在 Sticker Board；会话贴纸沿用已有数据，在图内创建、删除恢复。新引用使用原预览版本和选文 occurrence。
+
+验证：类型检查和构建通过；Core 255、Sidechat 99、Sticker Board 118、ThoughtDAG 30 项单元测试，以及思维图 49 项既有检查、20 项合成浏览器检查通过。合成浏览器不使用用户数据、不调用模型；尚未把这组新构建覆盖运行实例。
+
+## 本次开发历程草稿
+
+先核查功能的实际提供方，再根据用户批注收缩模块职责。用户提醒另一任务优化引用 UI；与任务 01a0b217-69f9-71a2-b574-bff353060fa9 协调后接手生产源码，保留其引用气泡、空输入提交和纵向菜单优化。旧数据迁移识别为普通贴纸能力，留在原插件，避免跟随会话贴纸误迁。
+
+迁入测试先暴露缺少 subscribe 的 Core 测试替身、旧版本断言和 ThoughtDAG 的 JSX 测试配置；修正测试宿主后通过。新增固定预览版本、完整 occurrence 和动作卸载测试。当前公开对话为来源，未绑定原始会话事件索引；原始 UI 优化归档不覆盖。
+
+## 提交与副本安装
+
+用户后续明确要求提交本次改动并安装入 0.1.5-rc.2 副本，替换旧对应插件。安装包、移出的旧目录和配置备份统一归档于 artifacts/selection-ownership-20260918；生产 UI 优化与已有提交进度支持保留。最终安装回执另行记录，不能将包构建通过等同运行时验收。

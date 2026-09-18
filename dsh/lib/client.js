@@ -144,12 +144,6 @@ window.__ModuleLoader__.load({
       }
       const managedAction = async (operation, input) => {
         if (!input || typeof input !== 'object') throw new Error('操作内容无效')
-        if (operation === 'session-sticker') {
-          if (!document.querySelector('[data-dsh-knowledge="1"]')) throw new Error('请启用匹配的会话贴纸插件')
-          setMap(false)
-          window.dispatchEvent(new CustomEvent('dsh-session-sticker-open', { detail: input.capture ? { sessionId: input.capture.sourceSessionId, anchorId: input.capture.anchorId, selectedText: input.capture.selectedText } : undefined }))
-          return { opened: true }
-        }
         if (operation === 'open-session') {
           if (typeof input.nativeSessionId !== 'string' || !input.nativeSessionId.trim() || input.nativeSessionId.length > 256 || input.logicalSessionId !== undefined)
             throw new Error('打开会话需要已解析的原生会话身份，请重新选择目标')
@@ -167,10 +161,10 @@ window.__ModuleLoader__.load({
           setMap(false); syncCurrent()
           return target
         }
-        if (operation === 'add-reference') {
+        if (operation === 'add-reference' || operation === 'stage-reference') {
           const core = annotation()
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.targetSessionId))
-          setMap(false)
+          if (operation === 'add-reference') setMap(false)
           return core.addCrossSessionReference(target.nativeSessionId, input.capture, { operationId: input.operationId })
         }
         if (operation === 'delete-reference') {
@@ -224,6 +218,7 @@ window.__ModuleLoader__.load({
       const stopSessionChanges = ctx.sessions.list.subscribe?.(sessionsChanged)
 
       const setMap = map => {
+        if (!map) selectionIntent = null
         if (map === mapState) return
         positionObserver.disconnect()
         if (map) {
@@ -278,6 +273,54 @@ window.__ModuleLoader__.load({
         // first boot. A delayed unconditional "shown" could reopen a closed view.
       }
 
+      let selectionIntent = null
+      const openSelection = async (kind, capture) => {
+        let fixed = capture
+        if (capture) {
+          if (capture.role !== 'assistant') throw new Error('请选择已完成的 AI 回复')
+          const identity = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(capture.sourceSessionId))
+          let anchorId = capture.messageId ?? capture.anchorId
+          const ui = (() => { try { return ctx.get('uiConversation') } catch { return undefined } })()
+          const snapshot = ui?.binding(capture.sourceSessionId).target('chat').getSnapshot()
+          const node = snapshot?.nodes.get(capture.anchorId) ?? snapshot?.order.map(key => snapshot.nodes.get(key)).find(node => node?.id === capture.anchorId)
+          if (node?.kind === 'assistant-step') {
+            if (node.data?.status !== 'settled' || !node.data?.finalNode?.messageId) throw new Error('请等待来源回复保存完成')
+            anchorId = node.data.finalNode.messageId
+          }
+          const latest = capture.expectedSourceVersionId ? { sourceVersionId: capture.expectedSourceVersionId } : await graphJson('preview?logicalSessionId=' + encodeURIComponent(identity.logicalSessionId))
+          const preview = await graphJson('preview?' + new URLSearchParams({ logicalSessionId: identity.logicalSessionId, sourceVersionId: latest.sourceVersionId, sourceAnchorId: anchorId }))
+          if (!preview.capture) throw new Error('这段回复尚未提供可引用来源')
+          fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
+        }
+        selectionIntent = { id: crypto.randomUUID(), kind, capture: fixed }
+        setMap(true)
+        if (!mapState) { selectionIntent = null; throw new Error('请先打开主会话，再进入思维图') }
+        send('td:selection-intent', { intent: selectionIntent })
+      }
+      const markerFiber = typeof ctx.inject === 'function' ? ctx.inject(['uiConversation'], ready => {
+        ready.effect(() => {
+          let disposed = false, unmount
+          import('/thoughtdag/host-markers.js?v=' + encodeURIComponent(pluginVersion || Date.now())).then(module => {
+            if (!disposed) {
+              const mounted = module.mountSourceMarkers({ sessions: ready.sessions, uiConversation: ready.get('uiConversation'), get: name => ready.get(name) })
+              const visibility = map => mounted.setVisible(!map)
+              mapSubscribers.add(visibility); visibility(mapState)
+              unmount = () => { mapSubscribers.delete(visibility); mounted.dispose() }
+            }
+          }).catch(error => console.warn('[thoughtdag] source markers unavailable', error))
+          return () => { disposed = true; unmount?.() }
+        }, 'thoughtdag: source markers')
+      }) : undefined
+      const selectionFiber = typeof ctx.inject === 'function' ? ctx.inject(['annotationCore'], ready => {
+        const core = ready.get('annotationCore')
+        if (!core?.features?.includes('native-selection-actions-v1') || !core.registerSelectionAction) return
+        ready.effect(() => {
+          const offReference = core.registerSelectionAction({ id: 'thoughtdag.reference', label: '跨会话引用', order: 30, iconPath: 'M14 3h7v7M21 3 10 14M10 3H4v17h17v-6', available: capture => capture.role === 'assistant', run: capture => openSelection('reference', capture) })
+          const offSticker = core.registerSelectionAction({ id: 'thoughtdag.session-sticker', label: '会话贴纸', order: 40, iconPath: 'M4 3h16v12l-6 6H4ZM14 21v-6h6', available: capture => capture.role === 'assistant', run: capture => openSelection('sticker', capture) })
+          return () => { offSticker(); offReference() }
+        }, 'thoughtdag: selection actions')
+      }) : undefined
+
       const Switch = () => {
         const [map, setMapState] = React.useState(mapState)
         React.useEffect(() => {
@@ -319,7 +362,9 @@ window.__ModuleLoader__.load({
           return
         }
         if (event.data.type === 'td:close') return setMap(false)
-        if (event.data.type === 'td:request-current') { syncCurrent(); send('td:view', { shown: mapState }); return }
+        if (event.data.type === 'td:intent-accepted' && event.data.id === selectionIntent?.id) { selectionIntent = null; return }
+        if (event.data.type === 'td:stickers-changed') { window.dispatchEvent(new Event('dsh-session-references-changed')); return }
+        if (event.data.type === 'td:request-current') { syncCurrent(); send('td:view', { shown: mapState }); if (selectionIntent) send('td:selection-intent', { intent: selectionIntent }); return }
         // the canvas forked or continued a session: stage it and go back to the
         // chat, which now shows exactly the context the canvas produced
         if (event.data.type === 'td:select-session' && typeof event.data.session === 'string') {
@@ -333,6 +378,8 @@ window.__ModuleLoader__.load({
       }
       window.addEventListener('message', receive)
       ctx.effect(() => () => {
+        void markerFiber?.dispose()
+        void selectionFiber?.dispose()
         window.removeEventListener('message', receive)
         window.removeEventListener('dsh-session-references-changed', referencesChanged)
         window.removeEventListener('focus', referencesChanged)
