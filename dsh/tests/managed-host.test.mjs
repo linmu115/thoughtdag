@@ -173,3 +173,19 @@ test('retired independent executor and review entry points remain unavailable', 
   for (const path of ['/inject', '/stream', '/chat']) assert.equal((await f.send('/thoughtdag/api' + path, { method: 'POST', body: {} })).status, 410)
   assert.equal((await f.api('review-source', { method: 'POST', body: {} })).status, 404)
 })
+
+
+test('missing or offline maintenance fails explicitly and late recovery retains the same authoritative services', async t => {
+ const f = await fixture(t)
+ const saved = f.services.maintenanceExtensionData
+ delete f.services.maintenanceExtensionData
+ assert.equal((await f.api('status')).body.capabilities.mainGraph, false)
+ assert.equal((await f.api('ensure', {method:'POST',body:{logicalSessionId:'session'}})).status,503)
+ f.services.maintenanceExtensionData = saved
+ const list = f.bridge.list
+ f.bridge.list = async () => { throw new TypeError('fetch failed') }
+ assert.equal((await f.api('status')).body.capabilities.mainGraph,false)
+ f.bridge.list = list
+ assert.equal((await f.api('status')).body.capabilities.mainGraph,true)
+ assert.ok(!f.calls.some(call => call[0] === 'save'))
+})

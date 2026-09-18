@@ -26,13 +26,15 @@ async function fixture(t, { width = 1100, height = 800, holdStatus = false, seed
       let result
       if (endpoint === 'status') { await statusReady; result = { protocolVersion: 2, mode: 'maintenance', capabilities: { storage: true, sessions: true, references: true, mainGraph: true } } }
       else if (endpoint === 'save') { current = { objectId: 'synthetic-canvas', revision: (current?.revision ?? 0) + 1, title: body.title, graph: !current && seedGraph ? structuredClone(seedGraph) : body.graph }; result = current }
+      else if (endpoint === 'ensure') { current = { objectId: 'synthetic-canvas', revision: 1, title: '合成主干', graph: seedGraph ? structuredClone(seedGraph) : {managedSchema:2,ownerSessionId:'existing',nodes:[],edges:[]} }; result = current }
+      else if (endpoint === 'relations') result = {items:[],nextCursor:null}
       else if (endpoint === 'canvas') result = current
       else if (endpoint === 'directory') result = { items: url.searchParams.has('workspaceId') ? [{ id: 'existing', logicalSessionId: 'existing', title: '已有会话标题' }] : [{ id: 'workspace', title: '合成工作区' }] }
       else if (endpoint === 'resolve') result = { logicalSessionId: 'existing', nativeSessionId: 'native-existing', title: '已有会话标题' }
       else { res.writeHead(500); res.end(JSON.stringify({ error: `Unexpected fixture endpoint ${endpoint}` })); return }
       res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result)); return
     }
-    res.setHeader('content-type', 'text/html'); res.end(`<html data-dsh-managed data-dsh-compact="${width <= 760}"><head><meta charset="utf-8"><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script>window.addEventListener('message',event=>{if(event.data?.type==='td:request-current')window.postMessage({source:'dsh-thoughtdag',type:'td:view',shown:true},location.origin)})</script><script src="/app.js"></script></body></html>`)
+    res.setHeader('content-type', 'text/html'); res.end(`<html data-dsh-managed data-dsh-compact="${width <= 760}"><head><meta charset="utf-8"><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script>window.addEventListener('message',event=>{if(event.data?.type==='td:request-current'){window.postMessage({source:'dsh-thoughtdag',type:'td:current-session',session:{id:'native-existing',title:'合成主干'}},location.origin);window.postMessage({source:'dsh-thoughtdag',type:'td:view',shown:true},location.origin)}})</script><script src="/app.js"></script></body></html>`)
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   const browser = await chromium.launch({ executablePath: browserPath, headless: true })
@@ -44,7 +46,7 @@ async function fixture(t, { width = 1100, height = 800, holdStatus = false, seed
 }
 
 async function draft(page) {
-  await page.getByRole('button', { name: '新建未绑定草稿', exact: true }).last().click()
+  assert.equal(await page.getByRole('button', { name: '新建未绑定草稿', exact: true }).count(), 0)
   await page.getByRole('button', { name: '添加空卡片', exact: true }).waitFor()
 }
 
@@ -54,7 +56,7 @@ test('dragging a measured card keeps it visible and preserves its saved position
   await page.getByRole('button', { name: '添加空卡片', exact: true }).click()
   const node = page.locator('.react-flow__node').first()
   await node.waitFor({ state: 'visible' })
-  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('button', { name: '保存主干', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('.mg-save-state')?.textContent.includes('已保存'))
   await node.evaluate(element => {
     window.dragVisibility = []
@@ -69,7 +71,7 @@ test('dragging a measured card keeps it visible and preserves its saved position
   await page.mouse.down()
   await page.mouse.move(box.x + 180, box.y + 145, { steps: 24 })
   await page.mouse.up()
-  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('button', { name: '保存主干', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('.mg-save-state')?.textContent.includes('已保存'))
   const after = calls.filter(call => call.endpoint === 'save').at(-1).body.graph.nodes[0]
   assert.ok(after.position.x > before.x + 40 && after.position.y > before.y + 40, JSON.stringify({ before, after }))
@@ -84,7 +86,7 @@ test('connected cards stay measured through background refresh during dragging',
     { id: 'lower', position: { x: 40, y: 300 }, data: { kind: 'placeholder', label: '接收卡片' } },
   ], edges: [{ id: 'link', source: 'upper', target: 'lower', data: { kind: 'pending' } }] }
   const { page, calls } = await fixture(t, { seedGraph })
-  await page.getByRole('button', { name: '新建未绑定草稿', exact: true }).last().click()
+  assert.equal(await page.getByRole('button', { name: '新建未绑定草稿', exact: true }).count(), 0)
   await page.locator('.react-flow__edge-path').waitFor({ state: 'attached' })
   const node = page.locator('.react-flow__node[data-id="upper"]')
   await page.evaluate(() => {
@@ -101,7 +103,7 @@ test('connected cards stay measured through background refresh during dragging',
   await page.evaluate(() => window.postMessage({ source: 'dsh-thoughtdag', type: 'td:graph-changed' }, location.origin))
   await refreshed
   await page.mouse.move(box.x + 180, box.y + 125, { steps: 18 }); await page.mouse.up()
-  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('button', { name: '保存主干', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('.mg-save-state')?.textContent.includes('已保存'))
   const result = await page.evaluate(() => { window.cardObserver.disconnect(); return { hidden: window.hiddenCount, sameEdge: window.edgePath === document.querySelector('.react-flow__edge-path') } })
   assert.deepEqual(result, { hidden: 0, sameEdge: true })
@@ -136,7 +138,7 @@ test('empty canvas offers workspace-first existing sessions and keeps adding sep
   await page.getByRole('dialog').getByRole('button', { name: /已有会话标题/ }).click()
   await page.locator('.mg-node-title').filter({ hasText: '已有会话标题' }).waitFor()
   assert.deepEqual(calls.filter(call => call.endpoint === 'directory').map(call => call.query), [{}, { workspaceId: 'workspace' }])
-  assert.deepEqual(calls.filter(call => call.body).map(call => call.endpoint), ['save'])
+  assert.deepEqual(calls.filter(call => call.body).map(call => call.endpoint), ['ensure'])
   assert.equal(await page.getByRole('dialog').count(), 0)
 })
 
@@ -150,7 +152,7 @@ test('canvas menu stays in narrow viewport and supports full keyboard navigation
   const box = await menu.boundingBox()
   assert.ok(box.x >= 7 && box.y >= 7 && box.x + box.width <= 593 && box.y + box.height <= 773, JSON.stringify(box))
   await page.keyboard.press('End')
-  assert.equal(await page.evaluate(() => document.activeElement.textContent), '关联已有对象')
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), '导入当前目标已有引用（不新建权限）')
   await page.keyboard.press('Home')
   assert.equal(await page.evaluate(() => document.activeElement.textContent), '添加空卡片')
   await page.keyboard.press('Enter')
@@ -174,21 +176,7 @@ test('canvas menu stays in narrow viewport and supports full keyboard navigation
   })
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '新会话的更多操作')
   assert.equal(await more.evaluate(element => element === document.activeElement), true)
-  const navigation = page.getByRole('button', { name: '主干导航', exact: true })
-  await page.keyboard.press('Enter')
-  await page.getByRole('menu').waitFor()
-  await page.evaluate(async () => {
-    const style = document.createElement('style'); style.textContent = '.mg-node-more { visibility: hidden !important; }'; document.head.append(style)
-    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
-    document.querySelector('.mg-nav-toggle').focus()
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { style.remove(); requestAnimationFrame(resolve) })))
-  })
-  assert.equal(await navigation.evaluate(element => element === document.activeElement), true)
-  await navigation.click()
-  await page.locator('#mg-main-navigation').getByRole('button', { name: '已有主干与待归属草稿', exact: true }).focus()
-  await page.keyboard.press('Escape')
-  assert.equal(await navigation.getAttribute('aria-expanded'), 'false')
-  assert.equal(await navigation.evaluate(element => element === document.activeElement), true)
+  assert.equal(await page.getByRole('button', { name: '主干导航', exact: true }).count(), 0)
   await page.getByText('图示与操作', { exact: true }).click()
   const help = await page.locator('.mg-canvas-help > div').boundingBox()
   assert.ok(help.x >= 0 && help.x + help.width <= 600 && help.y >= 0)

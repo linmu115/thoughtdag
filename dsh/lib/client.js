@@ -33,15 +33,16 @@ window.__ModuleLoader__.load({
 
       const style = document.createElement('style')
       style.textContent = `
-        .dsh-td-switch{position:relative;isolation:isolate;display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;flex-shrink:0;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}
-        .dsh-td-switch::before{content:"";position:absolute;z-index:-1;inset:3px auto 3px 3px;width:calc((100% - 8px)/2);border-radius:999px;background:var(--dsw-alias-label-primary,#0f1115);transform:translateX(0);transition:transform 320ms cubic-bezier(.22,.8,.25,1);pointer-events:none}
+        .dsh-td-switch{position:relative;isolation:isolate;display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;flex-shrink:0;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-base,#fff);padding:3px}
+        .dsh-td-switch::before{content:"";position:absolute;z-index:-1;inset:3px auto 3px 3px;width:calc((100% - 8px)/2);border-radius:999px;corner-shape:round;background:var(--dsw-alias-label-primary,#0f1115);transform:translateX(0);transition:transform 320ms cubic-bezier(.22,.8,.25,1);pointer-events:none}
         .dsh-td-switch[data-view="map"]::before{transform:translateX(calc(100% + 2px))}
-        .dsh-td-switch button{position:relative;height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:color 160ms ease}
+        .dsh-td-switch button{position:relative;height:26px;border:0;border-radius:999px;corner-shape:round;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:color 160ms ease}
         .dsh-td-switch button:hover{color:var(--dsw-alias-label-primary,#0f1115)}
         .dsh-td-switch button.active{color:var(--dsw-alias-label-primary-inverted,#fff)}
         .dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}
+        .dsh-td-header-switch{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2}
         .dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}
-        .dsh-td-overlay{position:fixed;z-index:100;inset:0;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
+        .dsh-td-overlay{position:fixed;z-index:100;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
         .dsh-td-overlay.is-open{opacity:1;pointer-events:auto}
         .dsh-td-overlay[data-transitioning]{will-change:opacity}
         .dsh-td-overlay[hidden]{display:none}
@@ -82,10 +83,13 @@ window.__ModuleLoader__.load({
         // actual borders, rather than depending on generated CSS module names.
         const header = headerSwitch.closest('header')
         const box = header?.getBoundingClientRect()
-        const rail = box?.width > 0 ? Math.max(0, box.left) : 232
+        const center = headerSwitch.closest('[data-pane=conversation]') ?? headerSwitch.closest('[data-slot=conversation]')?.parentElement
+        const bounds = center?.getBoundingClientRect() ?? box
+        if (bounds) Object.assign(overlay.style, { left: bounds.left + 'px', top: bounds.top + 'px', width: bounds.width + 'px', height: bounds.height + 'px' })
+        const rail = box?.width > 0 ? Math.max(0, box.left) : 0
         const bottom = box?.height > 0 ? box.bottom : Math.max(76, top + height + 28)
         const values = {
-          left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px',
+          left: (bounds ? bounds.left + (bounds.width-width)/2 : left) + 'px', top: top + 'px', width: width + 'px', height: height + 'px',
           '--dsh-left-rail': rail + 'px', '--dsh-chrome-height': bottom + 'px',
           '--dsh-chrome-top': Math.max(0, box?.top ?? 0) + 'px',
           '--dsh-title-room': Math.max(0, left - rail - 32) + 'px',
@@ -108,11 +112,8 @@ window.__ModuleLoader__.load({
       const blockedRoots = new Map()
       const blockConversation = block => {
         if (block) {
-          for (const child of document.body.children) {
-            if (child === overlayHost || !('inert' in child) || blockedRoots.has(child)) continue
-            blockedRoots.set(child, child.inert)
-            child.inert = true
-          }
+          const child = headerSwitch?.closest('[data-pane=conversation]') ?? headerSwitch?.closest('[data-slot=conversation]')?.parentElement
+          if (child && !blockedRoots.has(child)) { blockedRoots.set(child, child.inert); child.inert = true }
         } else {
           for (const [element, inert] of blockedRoots) element.inert = inert
           blockedRoots.clear()

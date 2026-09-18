@@ -32,3 +32,5 @@ relations:
 - **业务意图**：校验 iframe 请求，再调用原生会话、Annotation Core 或贴纸/笔记导航。每次打开会话先重新解析目标身份；存在合法入向引用时由 Core 准备，成功后才进入会话。
 
 本模块不发送用户正文，也不管理图的持久修订。对外调用范围见 [[IF-suite-consumer]]；自己提供给 iframe 的约定见 [[IF-host-bridge]]。
+
+本轮主窗口与恢复边界见 [2026-09-18实施及验证记录](../../../../../changes/2026-09-18-functional-recovery-and-main-windows.md)。原生左右栏由外层保留，图仅覆盖会话中心区域；存量草稿保留，入口退役。
