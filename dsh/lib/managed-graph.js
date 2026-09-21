@@ -1,4 +1,6 @@
 
+import { createSessionGraph, validateSessionGraph } from './session-graph.js'
+const localGraphs = new WeakMap()
 const NAMESPACE = 'thoughtdag'
 const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links', 'stickers'])
 const MAX_BYTES = 512 * 1024
@@ -17,9 +19,12 @@ function service(ctx, name) {
   try { return typeof ctx.get === 'function' ? ctx.get(name) : ctx[name] } catch { return undefined }
 }
 function capabilities(ctx) {
-  const graph = service(ctx, 'maintenanceGraph')
-  const bridge = service(ctx, 'maintenanceExtensionData')?.bridge
-  return { graph: graph?.protocolVersion === 2 ? graph : undefined, bridge }
+  const data = service(ctx, 'sessionExtensionData'), references = service(ctx, 'sessionReferenceContext')
+  if (data?.protocolVersion === 1 && references?.protocolVersion === 1) {
+    if (!localGraphs.has(ctx)) localGraphs.set(ctx, createSessionGraph(data, references, ctx))
+    return localGraphs.get(ctx)
+  }
+  return { mode: 'local' }
 }
 function bounded(value) {
   if (Buffer.byteLength(JSON.stringify(value)) > MAX_BYTES) throw new ManagedGraphError(413, '内容超过单次额度，请分成多个画布或缩小选段')
@@ -61,24 +66,25 @@ async function bodyOf(req) {
 /** Instance-bound bridge. It never accepts Engine credentials, paths or a run ID. */
 export function createManagedGraph(ctx) {
   async function dispatch(operation, method, query, input) {
-    const { graph, bridge } = capabilities(ctx)
+    const { graph, bridge, mode = 'local' } = capabilities(ctx)
     if (operation === 'status' && method === 'GET') {
       let storage = false, sessions = false, reason
       try {
         if (!bridge) throw new Error('当前实例尚未接入图数据存储')
         await bridge.list(NAMESPACE)
         storage = true
-        if (!graph) throw new Error('当前维护插件尚未提供会话图接口，请安装匹配版本')
+        if (!graph) throw new Error('当前实例尚未提供会话图接口，请检查 Core 与会话数据服务')
         await graph.directory()
         sessions = true
       } catch (error) { reason = publicError(error) }
-      return { protocolVersion: 2, mode: 'maintenance', capabilities: { storage, sessions, mainGraph: !!graph,
-        references: sessions && service(ctx, 'maintenanceSessionContext')?.protocolVersion === 1,
-        nativeContext: service(ctx, 'maintenanceNativeContext')?.protocolVersion === 1 && typeof service(ctx, 'maintenanceNativeContext')?.requestAsUser === 'function' }, ...(reason ? { reason } : {}) }
+      return { protocolVersion: 2, mode, capabilities: { storage, sessions, mainGraph: storage && sessions && !!graph,
+        references: sessions && service(ctx, 'sessionReferenceContext')?.protocolVersion === 1,
+        nativeContext: service(ctx, 'sessionNativeContext')?.protocolVersion === 1 && typeof service(ctx, 'sessionNativeContext')?.requestAsUser === 'function' }, ...(reason ? { reason } : {}) }
     }
-    if (!graph || !bridge) throw new ManagedGraphError(503, '当前实例缺少匹配的会话图接口或存储，请检查维护插件配置')
+    if (!graph || !bridge) throw new ManagedGraphError(503, '当前实例缺少匹配的会话图接口或存储，请检查 Core 与会话数据服务')
+    if (method === 'POST') await service(ctx, 'sessionWriteAccess')?.assertWritable()
     if (method === 'POST' && operation === 'native-context') {
-      const nativeContext = service(ctx, 'maintenanceNativeContext')
+      const nativeContext = service(ctx, 'sessionNativeContext')
       if (nativeContext?.protocolVersion !== 1 || typeof nativeContext.requestAsUser !== 'function') throw new ManagedGraphError(503, '当前实例尚未接入原生上下文管理，请安装匹配版本')
       if (!NATIVE_CONTEXT_OPERATIONS.has(input.operation)) throw invalid('没有这个上下文操作')
       const payload = input.input ?? {}
@@ -111,9 +117,7 @@ export function createManagedGraph(ctx) {
       if (operation === 'relations') return graph.relations(id(query.get('logicalSessionId'), '主干会话'), after)
       if (operation === 'disclosures') return graph.disclosures(id(query.get('objectId'), '主干图'), after)
       if (operation === 'create-workspaces') {
-        const knowledge = service(ctx, 'maintenanceKnowledge')
-        if (!knowledge?.dispatch) throw new ManagedGraphError(503, '当前维护插件尚未提供工作区创建接口')
-        return knowledge.dispatch('create-workspaces', after ? { after } : {})
+        return graph.createWorkspaces(after)
       }
       if (operation === 'canvases') {
         const page = await bridge.list(NAMESPACE, after, 'all')
@@ -122,21 +126,10 @@ export function createManagedGraph(ctx) {
       if (operation === 'canvas') return graph.load(id(query.get('objectId'), '画布身份'))
       if (operation === 'objects') {
         const namespace = objectNamespace(query.get('namespace'))
-        if (namespace === 'stickers') {
-          const knowledge = service(ctx, 'maintenanceKnowledge')
-          if (!knowledge) throw new ManagedGraphError(503, '请升级知识数据适配器')
-          const page = await knowledge.request('list', { namespace, ...(after ? { after } : {}) })
-          return { ...page, items: page.items.map(o => ({ objectId: o.objectId, title: o.content.title, revision: o.revision, scope: o.scope, schemaVersion: o.content.schemaVersion, deleted: o.deleted })) }
-        }
         return bridge.list(namespace, after)
       }
       if (operation === 'object') {
         const namespace = objectNamespace(query.get('namespace')), objectId = id(query.get('objectId'), '对象身份')
-        if (namespace === 'stickers') {
-          const knowledge = service(ctx, 'maintenanceKnowledge')
-          if (!knowledge) throw new ManagedGraphError(503, '请升级知识数据适配器')
-          return { object: await knowledge.request('get', { namespace, objectId }) }
-        }
         return bridge.get(namespace, objectId)
       }
     }
@@ -152,15 +145,14 @@ export function createManagedGraph(ctx) {
         }
         return graph.remove({ objectId, expectedRevision: input.expectedRevision, operationId: id(input.operationId, '移除操作'), nodeIds: identifiers(input.nodeIds, '卡片'), edgeIds: identifiers(input.edgeIds, '连接') })
       }
-      if (input.graph?.managedSchema !== 2 || !Array.isArray(input.graph.nodes) || !Array.isArray(input.graph.edges)) throw invalid('主干格式不受支持，请升级匹配的维护插件')
+      if (input.graph?.managedSchema !== 2 || !Array.isArray(input.graph.nodes) || !Array.isArray(input.graph.edges)) throw invalid('主干格式不受支持，请升级会话图插件')
+      validateSessionGraph(input.graph)
       if (input.title !== undefined && (typeof input.title !== 'string' || input.title.length > 500)) throw invalid('主干标题无效')
       return graph.save({ ...(objectId ? { objectId } : {}), expectedRevision: input.expectedRevision, graph: input.graph, ...(input.title === undefined ? {} : { title: input.title }) })
     }
     if (method === 'POST' && operation === 'ensure') return graph.ensure(id(input.logicalSessionId, '主干会话'))
     if (method === 'POST' && operation === 'create-session') {
-      const knowledge = service(ctx, 'maintenanceKnowledge')
-      if (!knowledge?.dispatch) throw new ManagedGraphError(503, '当前维护插件尚未提供工作区创建接口')
-      return knowledge.dispatch('create-session', { operationId: id(input.operationId, '创建操作'), workspaceId: id(input.workspaceId, '工作区') })
+      return graph.createSession(id(input.operationId, '创建操作'), id(input.workspaceId, '工作区'))
     }
     throw new ManagedGraphError(404, '没有这个会话图操作')
   }

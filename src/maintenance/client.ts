@@ -1,6 +1,6 @@
 import type { ManagedGraph, UpstreamRelation } from './model'
 
-export type Status = { protocolVersion: 2; mode: 'maintenance'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean; nativeContext?: boolean }; reason?: string }
+export type Status = { protocolVersion: 2; mode: 'maintenance' | 'local'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean; nativeContext?: boolean }; reason?: string }
 export type Page<T> = { items: T[]; nextCursor?: string | null }
 export type DirectoryItem = { id: string; title: string; logicalSessionId?: string }
 export type SessionIdentity = { logicalSessionId: string; nativeSessionId: string; title: string }

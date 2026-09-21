@@ -33,15 +33,17 @@ window.__ModuleLoader__.load({
 
       const style = document.createElement('style')
       style.textContent = `
-        .dsh-td-switch{position:relative;isolation:isolate;display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;flex-shrink:0;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;background:var(--dsw-alias-bg-base,#fff);padding:3px}
-        .dsh-td-switch::before{content:"";position:absolute;z-index:-1;inset:3px auto 3px 3px;width:calc((100% - 8px)/2);border-radius:999px;background:var(--dsw-alias-label-primary,#0f1115);transform:translateX(0);transition:transform 320ms cubic-bezier(.22,.8,.25,1);pointer-events:none}
+        .dsh-td-switch{position:relative;isolation:isolate;display:inline-grid;grid-template-columns:repeat(2,1fr);gap:2px;flex-shrink:0;border:1px solid var(--dsw-alias-border-l2,#0000001a);border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-base,#fff);padding:3px}
+        .dsh-td-switch::before{content:"";position:absolute;z-index:-1;inset:3px auto 3px 3px;width:calc((100% - 8px)/2);border-radius:999px;corner-shape:round;background:var(--dsw-alias-label-primary,#0f1115);transform:translateX(0);transition:transform 320ms cubic-bezier(.22,.8,.25,1);pointer-events:none}
         .dsh-td-switch[data-view="map"]::before{transform:translateX(calc(100% + 2px))}
-        .dsh-td-switch button{position:relative;height:26px;border:0;border-radius:999px;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:color 160ms ease}
+        .dsh-td-switch button{position:relative;height:26px;border:0;border-radius:999px;corner-shape:round;background:transparent;padding:0 11px;color:var(--dsw-alias-label-secondary,#61666b);font:600 12px var(--dsw-font-family,system-ui,sans-serif);cursor:pointer;white-space:nowrap;transition:color 160ms ease}
         .dsh-td-switch button:hover{color:var(--dsw-alias-label-primary,#0f1115)}
         .dsh-td-switch button.active{color:var(--dsw-alias-label-primary-inverted,#fff)}
         .dsh-td-switch button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color,#4176e6);outline-offset:2px}
+        header:has(.dsh-td-header-switch){position:relative}
+        .dsh-td-header-switch{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2}
         .dsh-td-canvas-switch{position:fixed;z-index:130;box-sizing:border-box}
-        .dsh-td-overlay{position:fixed;z-index:100;inset:0;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
+        .dsh-td-overlay{position:fixed;z-index:100;background:var(--dsw-alias-bg-base,#fff);opacity:0;pointer-events:none;transition:opacity 180ms cubic-bezier(.2,.65,.3,1)}
         .dsh-td-overlay.is-open{opacity:1;pointer-events:auto}
         .dsh-td-overlay[data-transitioning]{will-change:opacity}
         .dsh-td-overlay[hidden]{display:none}
@@ -67,6 +69,13 @@ window.__ModuleLoader__.load({
       // 契约——session 作用域槽位的 inject 首参是 sessionKey，签名因槽位而异。
       let mapState = false
       const mapSubscribers = new Set()
+      const conversationColumn = element => {
+        const host = element?.closest('[data-slot="main.conversation"], [data-slot="conversation"]')
+        if (!host) return element?.closest('[data-pane="conversation"]')
+        let column = host.parentElement
+        while (column && getComputedStyle(column).display === 'contents') column = column.parentElement
+        return column
+      }
       let headerSwitch = null
       let positionFrame = null
       const positionCanvasSwitch = () => {
@@ -82,13 +91,27 @@ window.__ModuleLoader__.load({
         // actual borders, rather than depending on generated CSS module names.
         const header = headerSwitch.closest('header')
         const box = header?.getBoundingClientRect()
-        const rail = box?.width > 0 ? Math.max(0, box.left) : 232
+        const center = conversationColumn(headerSwitch)
+        const bounds = center?.getBoundingClientRect() ?? box
+        if (bounds) Object.assign(overlay.style, { left: bounds.left + 'px', top: bounds.top + 'px', width: bounds.width + 'px', height: bounds.height + 'px' })
+        const rail = box?.width > 0 ? Math.max(0, box.left) : 0
         const bottom = box?.height > 0 ? box.bottom : Math.max(76, top + height + 28)
+        const title = header?.querySelector('nav button:disabled') ?? header?.querySelector('nav')
+        const titleBox = title?.getBoundingClientRect()
+        const titleStyle = title ? getComputedStyle(title) : null
+        const titleLeft = titleBox ? titleBox.left + (parseFloat(titleStyle?.paddingLeft) || 0) : (box?.left ?? 0) + 28
+        const titleTop = titleBox ? titleBox.top + (parseFloat(titleStyle?.paddingTop) || 0) : (box?.top ?? 0) + 14
         const values = {
-          left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px',
+          left: (bounds ? bounds.left + (bounds.width-width)/2 : left) + 'px', top: top + 'px', width: width + 'px', height: height + 'px',
           '--dsh-left-rail': rail + 'px', '--dsh-chrome-height': bottom + 'px',
           '--dsh-chrome-top': Math.max(0, box?.top ?? 0) + 'px',
           '--dsh-title-room': Math.max(0, left - rail - 32) + 'px',
+          '--dsh-canvas-header-height': Math.max(48, bottom - (bounds?.top ?? 0)) + 'px',
+          '--dsh-canvas-title-left': Math.max(0, titleLeft - (bounds?.left ?? 0)) + 'px',
+          '--dsh-canvas-title-top': Math.max(0, titleTop - (bounds?.top ?? 0)) + 'px',
+          '--dsh-canvas-title-size': (parseFloat(titleStyle?.fontSize) || 14) + 'px',
+          '--dsh-canvas-title-line': (parseFloat(titleStyle?.lineHeight) || 20) + 'px',
+          '--dsh-canvas-title-weight': titleStyle?.fontWeight || '500',
         }
         for (const [name, value] of Object.entries(values)) {
           if (canvasSwitch.style.getPropertyValue(name) !== value) canvasSwitch.style.setProperty(name, value)
@@ -108,11 +131,8 @@ window.__ModuleLoader__.load({
       const blockedRoots = new Map()
       const blockConversation = block => {
         if (block) {
-          for (const child of document.body.children) {
-            if (child === overlayHost || !('inert' in child) || blockedRoots.has(child)) continue
-            blockedRoots.set(child, child.inert)
-            child.inert = true
-          }
+          const child = conversationColumn(headerSwitch)
+          if (child && !blockedRoots.has(child)) { blockedRoots.set(child, child.inert); child.inert = true }
         } else {
           for (const [element, inert] of blockedRoots) element.inert = inert
           blockedRoots.clear()
@@ -278,7 +298,6 @@ window.__ModuleLoader__.load({
         let fixed = capture
         if (capture) {
           if (capture.role !== 'assistant') throw new Error('请选择已完成的 AI 回复')
-          const identity = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(capture.sourceSessionId))
           let anchorId = capture.messageId ?? capture.anchorId
           const ui = (() => { try { return ctx.get('uiConversation') } catch { return undefined } })()
           const snapshot = ui?.binding(capture.sourceSessionId).target('chat').getSnapshot()
@@ -287,10 +306,15 @@ window.__ModuleLoader__.load({
             if (node.data?.status !== 'settled' || !node.data?.finalNode?.messageId) throw new Error('请等待来源回复保存完成')
             anchorId = node.data.finalNode.messageId
           }
-          const latest = capture.expectedSourceVersionId ? { sourceVersionId: capture.expectedSourceVersionId } : await graphJson('preview?logicalSessionId=' + encodeURIComponent(identity.logicalSessionId))
-          const preview = await graphJson('preview?' + new URLSearchParams({ logicalSessionId: identity.logicalSessionId, sourceVersionId: latest.sourceVersionId, sourceAnchorId: anchorId }))
-          if (!preview.capture) throw new Error('这段回复尚未提供可引用来源')
-          fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
+          if (kind === 'sticker') {
+            fixed = { ...capture, anchorId }
+          } else {
+            const identity = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(capture.sourceSessionId))
+            const latest = capture.expectedSourceVersionId ? { sourceVersionId: capture.expectedSourceVersionId } : await graphJson('preview?logicalSessionId=' + encodeURIComponent(identity.logicalSessionId))
+            const preview = await graphJson('preview?' + new URLSearchParams({ logicalSessionId: identity.logicalSessionId, sourceVersionId: latest.sourceVersionId, sourceAnchorId: anchorId }))
+            if (!preview.capture) throw new Error('这段回复尚未提供可引用来源')
+            fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
+          }
         }
         selectionIntent = { id: crypto.randomUUID(), kind, capture: fixed }
         setMap(true)

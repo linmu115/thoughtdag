@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { createManagedGraph } from './managed-graph.js'
 
 export const name = 'thoughtdag'
-export const inject = ['webServer', 'sessions', 'sessionController']
+export const inject = ['webServer', 'sessions', 'sessionController', 'annotationCoreHost', 'sessionExtensionData', 'sessionReferenceContext']
 const root = fileURLToPath(new URL('../', import.meta.url))
 const appDir = resolve(root, 'dist-app')
 const version = createRequire(import.meta.url)('../package.json').version
@@ -32,7 +32,7 @@ export async function apply(ctx, config = {}) {
     const url = new URL(req.url ?? '/', 'http://dsh.local')
     const path = url.pathname.slice((prefix + '/api').length)
     if (path.startsWith('/managed/')) return managed(req, res, path, url)
-    if (path === '/version' && req.method === 'GET') return json(res, 200, { version, mode: 'maintenance' })
+    if (path === '/version' && req.method === 'GET') return json(res, 200, { version, mode: 'local' })
     return json(res, 410, { error: '请使用会话图入口；此实例通过统一引用接口读取上下文' })
   }
   const serve = async (req, res) => {
@@ -56,5 +56,5 @@ export async function apply(ctx, config = {}) {
   } }), 'thoughtdag: redirect')
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: prefix + '/api', handler: api }), 'thoughtdag: api')
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: prefix, handler: serve }), 'thoughtdag: static')
-  ctx.logger.info('[dsh-thoughtdag] Maintenance canvas mounted at ' + prefix + '/')
+  ctx.logger.info('[dsh-thoughtdag] Session canvas mounted at ' + prefix + '/')
 }

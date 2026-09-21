@@ -43,6 +43,11 @@ export function initDshAppearance(): () => void {
     tokens['--dsh-chrome-height'] = geometry('--dsh-chrome-height', 76)
     tokens['--dsh-chrome-top'] = geometry('--dsh-chrome-top', 0)
     tokens['--dsh-title-room'] = geometry('--dsh-title-room', 460)
+    for (const [name, fallback] of Object.entries({ 'header-height': 76, 'title-left': 28, 'title-top': 14, 'title-size': 14, 'title-line': 20 })) {
+      tokens[`--dsh-canvas-${name}`] = geometry(`--dsh-canvas-${name}`, fallback)
+    }
+    const titleWeight = (anchor as HTMLElement | null)?.style?.getPropertyValue('--dsh-canvas-title-weight').trim()
+    tokens['--dsh-canvas-title-weight'] = titleWeight && /^\d{1,4}$/.test(titleWeight) ? titleWeight : '500'
     for (const [name, value] of Object.entries(tokens)) root.style.setProperty(name, value)
     root.dataset.theme = dark ? 'dark' : 'light'
     root.dataset.dshManaged = 'true'

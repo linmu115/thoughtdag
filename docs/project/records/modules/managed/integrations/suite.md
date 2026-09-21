@@ -1,23 +1,34 @@
 ---
-id: IF-suite-consumer
-kind: interface
-title: ThoughtDAG 接入 Annotation、贴纸和笔记
-status: current
-summary: 引用创建与准备经Core；已有贴纸和笔记只按各自入口导航。
-sources:
-- path: ../../dsh/lib/client.js
-- path: ../../dsh/lib/managed-graph.js
-relations:
-- relation: consumes
-  to:
-    record_id: IF-core-client
-    project_id: dd46311f-d98d-49ff-ae13-fef0a8a6f9c3
-  reason: 宿主客户端实际调用addCrossSessionReference、prepareGraphReferences、resolveReferenceLink/deleteReferenceLink与openAnnotationInSession
+{
+  "id": "IF-suite-consumer",
+  "kind": "interface",
+  "title": "ThoughtDAG 接入 Annotation、贴纸和笔记",
+  "status": "current",
+  "summary": "引用创建与准备经Core；已有贴纸和笔记只按各自入口导航。",
+  "sources": [
+    {
+      "path": "../../dsh/lib/client.js"
+    },
+    {
+      "path": "../../dsh/lib/managed-graph.js"
+    }
+  ],
+  "relations": [
+    {
+      "relation": "consumes",
+      "to": {
+        "record_id": "IF-core-client",
+        "project_id": "ddcdd580-5275-5eef-9578-6de0e81fa887"
+      },
+      "reason": "宿主客户端实际调用addCrossSessionReference、prepareGraphReferences、resolveReferenceLink/deleteReferenceLink与openAnnotationInSession"
+    }
+  ]
+}
 ---
 
 # ThoughtDAG 接入 Annotation、贴纸和笔记
 
-DSH–Obsidian Suite 是外部项目 dd46311f-d98d-49ff-ae13-fef0a8a6f9c3。这些前端方法的唯一合同按本页关系中的项目 ID 与 IF-core-client 条目 ID 定位（Suite 的 IF-reference 仍是兼容总入口）；本页记录实际调用范围。
+Annotation Core 是外部项目 ddcdd580-5275-5eef-9578-6de0e81fa887。这些前端方法的唯一合同按本页关系中的项目 ID 与 IF-core-client 条目 ID 定位（Core 的 IF-reference 仍是兼容总入口）；本页记录实际调用范围。
 
 ## 直接调用 Core
 

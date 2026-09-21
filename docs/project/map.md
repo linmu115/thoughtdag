@@ -1,5 +1,7 @@
 # ThoughtDAG · DSH 会话主干图
 
+2026-09-20 独立运行与接入边界：[[IMP-independent-components-20260920]]。测试实例已安装 .19，所属会话卡片与重开保持实测见 [[IMP-owner-session-card-20260920]]；名称读取缺口已修复，其他业务按各自验证范围阅读。
+
 当前职责修订见 [[DEC-selection-ownership-20260918|划选与会话贴纸归属]]；旧版入口说明以此修订为准。
 
 ## 这个项目做什么

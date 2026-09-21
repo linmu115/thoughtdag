@@ -1,4 +1,8 @@
+> DSH 独立插件交付：**0.4.14-rc2.19**，面向 DSH 0.1.5-rc.2，基础能力仅依赖 Core。请先阅读 [DSH 插件 README](dsh/README.md) 和 [安装教程](dsh/docs/INSTALL.md)。下文 standalone 原型与历史组合不作为本批安装入口。
+
 # ThoughtDAG · DSH session graph fork
+
+本轮独立组件升级候选及边界见[2026-09-20 架构升级](docs/changes/2026-09-20-independent-components.md)。源码候选不代表运行副本已升级。
 
 Main graph headings, session cards and the graph list now follow current session names, including existing graphs that cached an ID. Rename sessions in the conversation page; materials and unbound drafts retain their own names. See [name synchronization](docs/changes/2026-09-15-current-session-names.md).
 

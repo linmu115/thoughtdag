@@ -9,5 +9,5 @@
         # Extra authorities the /thoughtdag/api Host check accepts; localhost
         # and 127.0.0.1 are always allowed.
         trustedHosts: []
-        # Graph storage and discovery use the configured Maintenance services.
+        # Graph storage uses public session data; Maintenance synchronization is optional.
         # Cross-session model context uses Annotation's bounded upstream tools.
