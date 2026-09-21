@@ -27,7 +27,7 @@ async function fixture(t, { width = 1100, height = 800, holdStatus = false, seed
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined
       calls.push({ endpoint, query: Object.fromEntries(url.searchParams), body })
       let result
-      if (endpoint === 'status') { await statusReady; result = { protocolVersion: 2, mode: 'maintenance', capabilities: { storage: true, sessions: true, references: true, mainGraph: true } } }
+      if (endpoint === 'status') { await statusReady; result = { protocolVersion: 2, mode: 'local', capabilities: { storage: true, sessions: true, references: true, mainGraph: true } } }
       else if (endpoint === 'save') { current = { objectId: 'synthetic-canvas', revision: (current?.revision ?? 0) + 1, title: body.title, graph: !current && seedGraph ? structuredClone(seedGraph) : body.graph }; result = current }
       else if (endpoint === 'ensure') { current = { objectId: 'synthetic-canvas', revision: 1, title: embedded ? '模型版本与可用工具检查' : '合成主干', graph: seedGraph ? structuredClone(seedGraph) : {managedSchema:2,ownerSessionId:'existing',nodes:[],edges:[]} }; result = current }
       else if (endpoint === 'relations') result = {items:[],nextCursor:null}

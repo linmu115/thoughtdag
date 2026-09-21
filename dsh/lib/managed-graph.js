@@ -2,7 +2,7 @@
 import { createSessionGraph, validateSessionGraph } from './session-graph.js'
 const localGraphs = new WeakMap()
 const NAMESPACE = 'thoughtdag'
-const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links', 'stickers'])
+const OBJECT_NAMESPACES = new Set(['annotation', 'obsidian-links'])
 const MAX_BYTES = 512 * 1024
 const NATIVE_CONTEXT_OPERATIONS = new Set(['status', 'inspect', 'requests', 'user-read', 'window-set', 'source-set', 'pin', 'release', 'graph-edit', 'discover'])
 
@@ -153,6 +153,16 @@ export function createManagedGraph(ctx) {
     if (method === 'POST' && operation === 'ensure') return graph.ensure(id(input.logicalSessionId, '主干会话'))
     if (method === 'POST' && operation === 'create-session') {
       return graph.createSession(id(input.operationId, '创建操作'), id(input.workspaceId, '工作区'))
+    }
+    if (method === 'POST' && operation === 'create-sticker') {
+      const sourceVersionId = optional(input.sourceVersionId, '来源版本')
+      return graph.createSticker({
+        operationId: id(input.operationId, '创建操作'),
+        workspaceId: id(input.workspaceId, '工作区'),
+        sourceSessionId: id(input.sourceSessionId, '来源会话'),
+        currentSessionId: id(input.currentSessionId, '当前会话'),
+        ...(sourceVersionId ? { sourceVersionId } : {}),
+      })
     }
     throw new ManagedGraphError(404, '没有这个会话图操作')
   }

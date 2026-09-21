@@ -1,12 +1,15 @@
 import type { ManagedGraph, UpstreamRelation } from './model'
 
-export type Status = { protocolVersion: 2; mode: 'maintenance' | 'local'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean; nativeContext?: boolean }; reason?: string }
+export type Status = { protocolVersion: 2; mode: 'local'; capabilities: { storage: boolean; sessions: boolean; references: boolean; mainGraph: boolean; nativeContext?: boolean }; reason?: string }
 export type Page<T> = { items: T[]; nextCursor?: string | null }
 export type DirectoryItem = { id: string; title: string; logicalSessionId?: string }
 export type SessionIdentity = { logicalSessionId: string; nativeSessionId: string; title: string }
 export type Capture = { sourceSessionId: string; anchorId: string; messageId?: string; role: 'assistant'; occurrence: number; selectedText: string; expectedSourceVersionId?: string }
 export type Preview = { logicalSessionId: string; nativeSessionId: string; sourceVersionId: string; items: { eventId: string; role: 'user' | 'assistant'; text: string; offset: number; complete: boolean }[]; capture?: Capture; nextCursor?: string | null; hasMore: boolean }
-export type ExtensionObject = { objectId: string; title: string; revision: number; deleted: boolean; scope: { namespace: string }; schemaVersion: number; content?: { schemaVersion: number; title: string; body: unknown; references?: { logicalSessionId: string; messageId?: string }[] } }
+/** 宿主扩展对象的可读形状（与 `./contracts` 的 ExtensionObject 同一份定义）。 */
+export type ExtensionObject = import('./contracts').ExtensionObject
+/** 新会话 + 单向拓扑绑定边的创建回执。 */
+export type StickerIdentity = SessionIdentity & { boundSourceSessionId: string; graphObjectId?: string; boundEdgeId?: string; sourceVersionId?: string }
 export type ExtensionDetail = { object: ExtensionObject }
 export type SaveResult = { status: 'saved' | 'unchanged'; object: ExtensionObject } | { status: 'conflict'; conflict: { current: ExtensionObject } }
 export type GraphDocument = { objectId: string; revision: number; title: string; graph: ManagedGraph; reused?: boolean; draftObjectId?: string }
@@ -61,6 +64,8 @@ export const managedApi = {
   createWorkspaces: (after?: string) => request<Page<DirectoryItem>>('create-workspaces', { after }),
   disclosures: (objectId: string, after?: string) => request<DisclosurePage>('disclosures', { objectId, after }),
   createSession: (operationId: string, workspaceId: string, title?: string) => request<SessionIdentity>('create-session', {}, { operationId, workspaceId, title }),
+  /** 会话贴纸：在当前工作区新开会话，并在新会话图里记下「来源 → 新会话」的拓扑绑定。 */
+  createSticker: (input: { sourceSessionId: string; currentSessionId: string; workspaceId: string; operationId: string }) => request<StickerIdentity>('create-sticker', {}, input),
 }
 
 type ParentInputs = {
@@ -69,20 +74,27 @@ type ParentInputs = {
   'delete-reference': { nativeSessionId: string; referenceId: string }
   'open-object': { namespace: string; objectId: string }
   'stage-reference': { targetSessionId: string; capture: Capture; operationId: string }
+  /** 当前会话所在工作区（宿主自己的工作区投影回答，不需要用户再选）。 */
+  'current-workspace': Record<string, never>
 }
-type ParentRequestArgs = { [Operation in keyof ParentInputs]: [operation: Operation, input: ParentInputs[Operation]] }[keyof ParentInputs]
+type ParentResults = { 'current-workspace': { workspaceId: string | null; cwd?: string; sessionId: string } }
 
-export function parentRequest<T = unknown>(...[operation, input]: ParentRequestArgs): Promise<T> {
+/** 有具名回执的操作取具名类型，其余保持 unknown，由调用方自己收窄。 */
+type ParentResult<Operation> = Operation extends keyof ParentResults ? ParentResults[Operation] : unknown
+
+export function parentRequest<Operation extends keyof ParentInputs>(
+  ...[operation, input]: [operation: Operation, input: ParentInputs[Operation]]
+): Promise<ParentResult<Operation>> {
   if (window.parent === window) return Promise.reject(new Error('请从当前实例的图谱面板打开，才能进入会话或操作引用。'))
   const requestId = crypto.randomUUID()
-  return new Promise((resolve, reject) => {
+  return new Promise<ParentResult<Operation>>((resolve, reject) => {
     const cleanup = () => { window.removeEventListener('message', listener); window.clearTimeout(timer) }
     const listener = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return
-      const data = event.data as { source?: string; type?: string; requestId?: string; ok?: boolean; error?: string; result?: T } | null
+      const data = event.data as { source?: string; type?: string; requestId?: string; ok?: boolean; error?: string; result?: ParentResult<Operation> } | null
       if (!data || data.source !== 'dsh-thoughtdag' || data.type !== 'td:managed-result' || data.requestId !== requestId) return
       cleanup()
-      if (data.ok === true) resolve(data.result as T)
+      if (data.ok === true) resolve(data.result as ParentResult<Operation>)
       else reject(new Error(typeof data.error === 'string' ? data.error : '会话操作未完成，请重试。'))
     }
     const timer = window.setTimeout(() => { cleanup(); reject(new Error('会话操作暂未确认，请返回目标会话检查引用状态后再重试。')) }, 30_000)

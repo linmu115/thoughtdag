@@ -162,8 +162,34 @@ window.__ModuleLoader__.load({
         if (!core?.features?.includes('graph-reference-actions-v1')) throw new Error('当前注释插件尚未接入会话图，请安装匹配版本')
         return core
       }
+      // 「当前会话在哪个工作区」由宿主自己的工作区投影回答：工作区行的 sessionIds
+      // 就是归属关系，不需要用户再选一次，也不需要自己比对路径。
+      // 宿主加载顺序可能让 workspaces 尚未就绪，所以这里等它就绪再解析。
+      const currentWorkspace = session => new Promise((resolve, reject) => {
+        const read = () => {
+          const id = session?.id ?? ctx.sessions.list.getSnapshot().current
+          if (id === undefined) throw new Error('尚未选择会话，无法确定工作区')
+          let items = []
+          try { items = ctx.get('workspaces')?.list?.getSnapshot()?.items ?? [] } catch { items = [] }
+          const owned = items.find(row => Array.isArray(row.sessionIds) && row.sessionIds.includes(id))
+          if (owned?.workspaceId) return { workspaceId: owned.workspaceId, sessionId: id }
+          // 没有登记的工作区时退回会话自己的目录：cwd 让宿主把会话建在同一目录。
+          if (typeof session?.cwd === 'string' && session.cwd.trim()) return { workspaceId: null, cwd: session.cwd, sessionId: id }
+          throw new Error('当前会话尚未归属任何工作区，无法确定新会话的位置')
+        }
+        const settle = () => {
+          try { resolve(read()) } catch (error) { reject(error) }
+        }
+        let pending = false
+        try {
+          pending = typeof ctx.inject === 'function' && ctx.inject(['workspaces'], () => settle()) !== undefined
+        } catch { pending = false }
+        // inject 只回答以后；已经就绪时直接结算，未就绪则由注入回调结算一次。
+        if (ctx.get?.('workspaces') !== undefined || !pending) settle()
+      })
       const managedAction = async (operation, input) => {
         if (!input || typeof input !== 'object') throw new Error('操作内容无效')
+        if (operation === 'current-workspace') return currentWorkspace(currentSession())
         if (operation === 'open-session') {
           if (typeof input.nativeSessionId !== 'string' || !input.nativeSessionId.trim() || input.nativeSessionId.length > 256 || input.logicalSessionId !== undefined)
             throw new Error('打开会话需要已解析的原生会话身份，请重新选择目标')
@@ -196,15 +222,10 @@ window.__ModuleLoader__.load({
           return core.deleteReferenceLink(target.nativeSessionId, link.setId, link.referenceId)
         }
         if (operation === 'open-object') {
-          if (!['annotation', 'obsidian-links', 'stickers'].includes(input.namespace)) throw new Error('未接入这个对象类型')
+          if (!['annotation', 'obsidian-links'].includes(input.namespace)) throw new Error('未接入这个对象类型')
           const detail = await graphJson('object?' + new URLSearchParams({ namespace: input.namespace, objectId: input.objectId }))
           if (detail.object.deleted) throw new Error('该对象已删除')
           const body = detail.object.content.body
-          if (input.namespace === 'stickers') {
-            const target = await graphJson('resolve?logicalSessionId=' + encodeURIComponent(body.logicalSessionId))
-            await ctx.sessions.refresh(); await ctx.sessions.open(target.nativeSessionId); setMap(false); syncCurrent()
-            return { opened: true }
-          }
           if (input.namespace === 'obsidian-links') {
             if (body.kind === 'note-link' && body.note?.noteId) {
               location.href = 'obsidian://deepharness-note?' + new URLSearchParams({ vault: body.note.vaultId, note: body.note.noteId, ...(body.note.blockId ? { block: body.note.blockId } : {}) })

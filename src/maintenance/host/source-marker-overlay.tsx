@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpLeft, Unlink, X } from 'lucide-react';
-import type { GraphSessionIdentity } from '@linmu/dsh-session-contracts';
 import type { Context } from './geometry-contract';
 import type { StickerChatSnapshotLike } from './geometry-contract';
 import { resolveRenderedAnchorKey, spreadDotPoint } from './geometry-contract';
 import type { StickerView } from './geometry-contract';
 import { StickerGeometryCache } from './sticker-geometry.ts';
-import { knowledgeRequest } from '../session-stickers';
+import { managedApi } from '../client';
 import { cleanSourceMarkerBubble, groupSourceMarkers, loadSourceMarkers, resolveSourceMarkerAnchorKey, revokeSourceMarker, SOURCE_MARKERS_CHANGED } from './source-markers.ts';
 import type { SourceMarker, SourceMarkerLocalReferences } from './source-markers.ts';
 
@@ -121,7 +120,7 @@ export function SourceMarkerOverlay({ ctx, sessionId, snapshot, ordinaryStickers
       const target = targetId ? group?.targets.find(item => item.targetLogicalSessionId === targetId) : group?.targets.length === 1 ? group.targets[0] : undefined;
       if (!group || (targetId && !target)) { setMenu(null); throw new Error('这条来源引用已解除或不可用'); }
       if (!target) { setMenu({ key, mode: 'targets' }); return; }
-      const identity = await knowledgeRequest<GraphSessionIdentity>('resolve', { logicalSessionId: target.targetLogicalSessionId });
+      const identity = await managedApi.resolve(target.targetLogicalSessionId);
       if (!mounted.current || current.current !== sessionId) return;
       await ctx.sessions.open(identity.nativeSessionId);
       setMenu(null);

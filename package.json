@@ -58,7 +58,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@linmu/dsh-session-contracts": "file:../../worktrees/session-context-graph-20260913/dsh-session-maintenance/packages/contracts",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

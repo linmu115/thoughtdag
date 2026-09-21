@@ -81,8 +81,8 @@ test('an authorized relation without an edge is written to the canvas exactly on
   assert.equal(relabelled.edges[0].id, drawn.edges[0].id)
   assert.equal(sameEdges(drawn.edges, relabelled.edges), false)
 })
-test('session stickers start their real session while notes retain object navigation', () => {
-  assert.deepEqual(nodePrimaryAction({ kind: 'sticker', logicalSessionId: 'a', namespace: 'stickers', objectId: 'sticker', label: 'S' }), { operation: 'open-session', logicalSessionId: 'a' })
+test('session cards open their real session while notes retain object navigation', () => {
+  assert.deepEqual(nodePrimaryAction({ kind: 'session', logicalSessionId: 'a', label: 'S' }), { operation: 'open-session', logicalSessionId: 'a' })
   assert.equal(nodePrimaryAction({ kind: 'placeholder', label: 'Blank' }), undefined)
   assert.equal(nodePrimaryAction({ kind: 'note', logicalSessionId: 'a', namespace: 'obsidian-links', objectId: 'note', label: 'Note' }).operation, 'open-object')
 })

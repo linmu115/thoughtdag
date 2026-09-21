@@ -2,67 +2,87 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
+import { createHash } from 'node:crypto'
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright-core'
 import { apply } from '../lib/managed-entry.js'
 const output = resolve(process.argv[2] ?? '.local-e2e/main-graph-browser')
 await mkdir(output, { recursive: true })
-const sessionStickers = new Map();
-const docs = new Map(), refs = [], calls = [], routes = [], previews = [], created = new Map()
-let conflictNext = false, headVersion = 'version-1', sequence = 0
+const refs = [], calls = [], routes = [], previews = [], created = new Map()
+let headVersion = 'version-1'
 const identities = [{ logicalSessionId: 'source', nativeSessionId: 'native-source', title: '来源讨论 X' }, { logicalSessionId: 'target', nativeSessionId: 'native-target', title: '接收会话 Y' }]
-const node = (identity, index) => ({ id: 'session:' + identity.logicalSessionId, position: { x: 60, y: index * 220 + 50 }, data: { kind: 'session', label: identity.title, logicalSessionId: identity.logicalSessionId } })
 const copy = value => JSON.parse(JSON.stringify(value))
-const graph = {
-  protocolVersion: 2,
+// session_extensions / reference_context / workspace_registry / session_controller
+// 四个宿主机端口的合成实现：DAG 走的就是它自己那条本地路径（managed-entry.js 的
+// createManagedGraph + session-graph.js），没有任何 maintenance 替身。
+const sessionData = new Map(), refSeq = new Map()
+const sessionExtensions = {
+  protocolVersion: 1,
+  list: (namespace, sessionId) => [...sessionData.values()].filter(row => row.namespace === namespace && (!sessionId || row.sessionId === sessionId)),
+  get: (sessionId, namespace, objectId) => sessionData.get(JSON.stringify([sessionId, namespace, objectId])),
+  ready: async () => {},
+  write: async input => {
+    const key = JSON.stringify([input.sessionId, input.namespace, input.objectId]), old = sessionData.get(key)
+    if ((old?.revision ?? 0) !== input.expectedRevision) throw new Error('扩展对象修订冲突')
+    const value = { sessionId: input.sessionId, namespace: input.namespace, objectId: input.objectId, revision: (old?.revision ?? 0) + 1, deleted: input.deleted, content: copy(input.content) }
+    sessionData.set(key, value); return copy(value)
+  },
+}
+/** Core 本地引用端口的等价形状：capture / describe 写读同一份 annotation-upstream 记录。 */
+const sessionReferences = {
+  protocolVersion: 1,
   directory: async (workspace, after) => ({ items: workspace ? identities.map(s => ({ id: s.nativeSessionId, title: s.title, logicalSessionId: s.logicalSessionId })) : [{ id: 'work-1', title: '合成测试工作区' }], nextCursor: null }),
-  resolve: async input => { const identity = identities.find(s => s.logicalSessionId === input.logicalSessionId || s.nativeSessionId === input.nativeSessionId); if (!identity) throw Object.assign(new Error('合成会话未找到'), { code: 'GRAPH_SESSION_NOT_FOUND' }); return copy(identity) },
-  ensure: async owner => {
-    calls.push(['ensure', owner]); const id = 'main-' + owner
-    if (!docs.has(id)) { const identity = await graph.resolve({ logicalSessionId: owner }); docs.set(id, { objectId: id, revision: 1, title: identity.title + '的主干', graph: { managedSchema: 2, ownerSessionId: owner, nodes: [node(identity, 0)], edges: [] } }) }
-    return copy(docs.get(id))
-  },
-  load: async id => { calls.push(['load', id]); if (!docs.has(id)) throw new Error('合成主干不存在'); return copy(docs.get(id)) },
-  save: async input => {
-    const id = input.objectId ?? 'draft-' + ++sequence, old = docs.get(id)
-    if (conflictNext || (old?.revision ?? 0) !== input.expectedRevision) { conflictNext = false; throw new Error('修订冲突，本地编辑保留') }
-    const value = { objectId: id, revision: (old?.revision ?? 0) + 1, title: input.title ?? old?.title ?? 'Draft', graph: copy(input.graph) }; docs.set(id, value); calls.push(['save', id]); return copy(value)
-  },
-  bind: async input => {
-    const draft = docs.get(input.objectId), target = docs.get('main-' + input.logicalSessionId)
-    if (target) return { ...copy(target), reused: true, draftObjectId: input.objectId }
-    const value = { ...copy(draft), objectId: 'main-' + input.logicalSessionId, graph: { ...copy(draft.graph), ownerSessionId: input.logicalSessionId } }; docs.set(value.objectId, value); return copy(value)
-  },
-  remove: async input => {
-    calls.push(['remove', copy(input)]); const doc = docs.get(input.objectId)
-    if (doc.revision !== input.expectedRevision) throw new Error('移除修订冲突')
-    const affected = doc.graph.edges.filter(edge => input.edgeIds?.includes(edge.id) || input.nodeIds?.includes(edge.source) || input.nodeIds?.includes(edge.target))
-    const ids = affected.map(edge => edge.data.relationId).filter(Boolean)
-    for (const ref of refs) if (ids.includes(ref.referenceId)) ref.state = 'revoked'
-    doc.graph.removedRelationIds = [...new Set([...(doc.graph.removedRelationIds ?? []), ...ids])]
-    doc.graph.edges = doc.graph.edges.filter(edge => !affected.includes(edge)); doc.graph.nodes = doc.graph.nodes.filter(node => !input.nodeIds?.includes(node.id)); doc.revision++
-    return copy(doc)
-  },
-  relations: async (owner, after) => { assert.ok(owner); calls.push(['relations', owner, after]); return { items: copy(refs.filter(ref => ref.targetSessionId === owner)), nextCursor: null } },
   preview: async (logical, cursor, bounds) => {
     previews.push({ logical, cursor, bounds }); const version = bounds?.sourceVersionId ?? cursor?.split(':')[1] ?? headVersion
-    return { ...await graph.resolve({ logicalSessionId: logical }), sourceVersionId: version,
+    return { ...await sessionReferences.resolve({ logicalSessionId: logical }), sourceVersionId: version,
       items: cursor ? [{ eventId: 'answer-1', role: 'assistant', text: '后续解释：已固定的来源继续页。', offset: 40, complete: true }] : [{ eventId: 'question-1', role: 'user', text: '如何减少训练显存？', offset: 0, complete: true }, { eventId: 'answer-1', role: 'assistant', text: '梯度检查点通过增加计算时间换取显存。', offset: 0, complete: false }],
       capture: { sourceSessionId: 'native-source', anchorId: 'answer-1', messageId: 'answer-1', role: 'assistant', occurrence: 0, selectedText: '换取显存' }, nextCursor: cursor ? null : 'page:' + version, hasMore: !cursor }
+  },  // 真实 Core 能把任何已存在的会话解析成身份；合成替身也要能，否则宿主「新建会话」
+  // 这条无 Maintenance 路径就无从检查。未知身份按幂等方式登记成自己。
+  resolve: async input => {
+    const key = input.logicalSessionId ?? input.nativeSessionId
+    const found = identities.find(s => s.logicalSessionId === key || s.nativeSessionId === key)
+    if (found) return copy(found)
+    const created = { logicalSessionId: key, nativeSessionId: key, title: key }
+    identities.push(created); return copy(created)
   },
-  disclosures: async objectId => { calls.push(['disclosures', objectId]); return { items: refs.filter(ref => ref.targetSessionId === docs.get(objectId).graph.ownerSessionId).map(ref => ({ ...ref, requestId: 'request-1', receiptId: 'receipt-' + ref.referenceId, executionId: 'execution-1', operation: 'initial', delivery: 'prepared', status: 'ok', ranges: [{ eventId: 'answer-1', start: 0, end: 40 }], next: { eventId: 'answer-1', offset: 40 }, hasMore: true, truncated: true, returnedBytes: 120, recordedAt: '2026-09-15T00:00:00Z', selectedTurnComplete: false })), nextCursor: null, trimmed: true, trimmedCount: 2, maxEntries: 128, maxBytes: 262144 } },
+  capture: async input => {
+    calls.push(['capture', copy(input)])
+    const referenceId = 'reference-' + (refSeq.get(input.targetNativeSessionId) ?? 0) + 1
+    if (refSeq.get(input.targetNativeSessionId) === undefined) refSeq.set(input.targetNativeSessionId, 1); else refSeq.set(input.targetNativeSessionId, refSeq.get(input.targetNativeSessionId) + 1)
+    const record = {
+      referenceId, sourceNativeSessionId: input.sourceNativeSessionId, targetNativeSessionId: input.targetNativeSessionId,
+      sourceTitle: '来源讨论 X', sourceVersionId: input.expectedSourceVersionId ?? headVersion, cutoffEventId: input.anchorId,
+      sourceAnchorId: input.anchorId, selectedText: input.selectedText, state: 'pending', targetMessageId: null,
+    }
+    await sessionExtensions.write({ sessionId: input.targetNativeSessionId, namespace: 'annotation-upstream', objectId: referenceId, expectedRevision: 0, deleted: false, content: record })
+    refs.push({ ...record, namespace: 'annotation-upstream', objectId: referenceId, sourceSessionId: 'source', targetSessionId: 'target' })
+    return { ...record, requestDigest: 'digest', entries: [], turnStart: 0 }
+  },
+  describe: async (target, id) => {
+    const stored = sessionData.get(JSON.stringify([target, 'annotation-upstream', id]))
+    if (!stored) throw new Error('合成引用不存在')
+    return { record: copy(stored.content), sourceNativeSessionId: stored.content.sourceNativeSessionId }
+  },
+  inspect: async (target, id) => (await sessionReferences.describe(target, id)).record,
+  bind: async (target, id, messageId) => { const stored = sessionData.get(JSON.stringify([target, 'annotation-upstream', id])); stored.content = { ...stored.content, state: messageId === null ? 'revoked' : 'sent', targetMessageId: messageId }; return copy(stored.content) },
+  status: async (target, id) => { const stored = sessionData.get(JSON.stringify([target, 'annotation-upstream', id])); return { referenceId: id, state: stored.content.state } },
 }
-const bridge = { list: async () => ({ items: [...docs.values()].map(doc => ({ objectId: doc.objectId, title: doc.title, revision: doc.revision, deleted: false })), nextCursor: null }) }
-const knowledge = { dispatch: async (operation, input) => {
-  if (operation === 'create-workspaces') return { items: input.after ? [{ id: 'work-2', title: '第二页工作区' }] : [{ id: 'work-1', title: '合成测试工作区' }], nextCursor: input.after ? null : 'page-2' }
-  if (operation === 'create-session') {
-    calls.push(['create-session', input]); if (!created.has(input.operationId)) { const i = identities.length, identity = { logicalSessionId: 'new-' + i, nativeSessionId: 'native-new-' + i, title: '新会话 ' + i }; created.set(input.operationId, identity); identities.push(identity) }
-    return copy(created.get(input.operationId))
-  }
-  throw new Error('unexpected operation')
-} }
-await apply({ get: name => ({ maintenanceGraph: graph, maintenanceExtensionData: { bridge }, maintenanceSessionContext: { protocolVersion: 1 }, maintenanceKnowledge: knowledge })[name], sessions: new Map(), sessionController: {}, webServer: { register: route => { routes.push(route); return () => {} } }, effect: fn => fn(), logger: { info() {} } })
+const workspaceRegistry = { list: () => [{ id: 'work-1', title: '合成测试工作区', path: 'D:/synthetic-workspace' }, { id: 'work-2', title: '第二页工作区', path: 'D:/synthetic-second' }], get: id => workspaceRegistry.list().find(row => row.id === id) }
+const sessionController = { create: async input => { calls.push(['create-session', copy(input)]); const i = identities.length, identity = { logicalSessionId: 'new-' + i, nativeSessionId: 'native-new-' + i, title: '新会话 ' + i }; created.set(input.sessionId, identity); identities.push(identity); return identity } }
+const services = {
+  sessionExtensionData: sessionExtensions,
+  sessionReferenceContext: sessionReferences,
+  workspaceRegistry,
+  sessionController,
+  // 会话标题由宿主的标题投影提供（DAG 从不从目录记录或 id 猜标题）。
+  sessionQuery: { readTitleSnapshots: async ids => ids.map(sessionId => {
+    const identity = identities.find(row => row.logicalSessionId === sessionId || row.nativeSessionId === sessionId)
+    return identity ? { sessionId, status: 'fulfilled', value: { title: { title: identity.title } } } : { sessionId, status: 'rejected', reason: new Error('未知会话') }
+  }) },
+}
+await apply({ get: name => services[name], sessions: new Map(), webServer: { register: route => { routes.push(route); return () => {} } }, effect: fn => fn(), logger: { info() {} } })
 const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>
 *{box-sizing:border-box}body{margin:0;font:14px system-ui;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#111)}
 :root{--fixture-sidebar:320px;--fixture-header-height:76px}#fixture-layout{height:100vh;display:grid;grid-template-columns:var(--fixture-sidebar) minmax(0,1fr)}
@@ -73,37 +93,45 @@ const parentHtml = `<!doctype html><html><head><meta charset="utf-8"><style>
 @media(max-width:760px){:root{--fixture-sidebar:0px}#fixture-nav{padding:0;visibility:hidden}#fixture-title{width:100px}}
 </style></head><body><div id="fixture-layout"><aside id="fixture-nav">会话工作区</aside><main id="fixture-main"><header id="fixture-header"><div id="fixture-title-row"><span id="fixture-title">来源讨论 X</span><div id="toolbar"></div></div><div id="fixture-tabs">对话　轨迹</div></header><section id="fixture-content">完整会话页<textarea aria-label="合成草稿">保留原有草稿</textarea></section></main></div><script>
 window.fixture={selectionActions:{},current:'native-source',draft:'保留原有草稿',attachments:['保留附件'],actions:[]};
-const sessions={list:{getSnapshot:()=>({current:fixture.current,byId:{[fixture.current]:{displayTitle:fixture.current}}}),subscribe:fn=>{fixture.onSessionsChanged=fn;return()=>{fixture.onSessionsChanged=null}}},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})}};
+const sessions={list:{getSnapshot:()=>({current:fixture.current,byId:{[fixture.current]:{displayTitle:fixture.current,cwd:'D:/synthetic-workspace'}}}),subscribe:fn=>{fixture.onSessionsChanged=fn;return()=>{fixture.onSessionsChanged=null}}},refresh:async()=>{},open:async id=>{fixture.current=id;fixture.actions.push({operation:'open',id})}};
+const workspaces={list:{getSnapshot:()=>({items:[{workspaceId:'work-1',title:'合成测试工作区',path:'D:/synthetic-workspace',sessionIds:['native-source','native-target','native-new-2']}]})}};
 const core={registerSelectionAction:action=>{fixture.selectionActions[action.id]=action;return()=>delete fixture.selectionActions[action.id]},features:['native-selection-actions-v1','graph-reference-actions-v1','session-main-graph-v2'],prepareGraphReferences:async(target,referenceIds)=>{fixture.actions.push({operation:'prepare',target,referenceIds});return{preparedCount:referenceIds.length}},addCrossSessionReference:async(target,capture,options)=>{const r=await fetch('/fixture/reference',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target,capture,options})});fixture.current=target;fixture.actions.push({operation:'reference',target,capture});return r.json()},resolveReferenceLink:async(target,referenceId)=>({setId:'set',referenceId,state:'pending'}),deleteReferenceLink:async(target,setId,referenceId)=>{fixture.actions.push({operation:'delete-reference',target,referenceId});return{deleted:true}}};
 const react={useState:value=>[value,()=>{}],useEffect:fn=>fn(),createElement:(tag,props,...children)=>{const el=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='onClick')el.onclick=v;else if(k==='className')el.className=v;else if(v!==undefined)el.setAttribute(k,v)}for(const c of children.flat())el.append(c instanceof Node?c:String(c));return el}};
-window.__ModuleLoader__={load:mod=>mod.factory(()=>react).apply({inject:(deps,fn)=>{if(deps.includes('annotationCore'))fn({get:()=>core,effect:fn=>fn()});return{dispose(){}}},sessions,get:name=>name==='annotationCore'?core:undefined,effect:fn=>fn(),slots:{inject:(_name,fn)=>fn(),register:(_meta,C)=>{document.querySelector('#toolbar').append(C());return()=>{}}}})};
+window.__ModuleLoader__={load:mod=>mod.factory(()=>react).apply({inject:(deps,fn)=>{if(deps.includes('annotationCore'))fn({get:()=>core,effect:fn=>fn()});return{dispose(){}}},sessions,get:name=>name==='annotationCore'?core:name==='workspaces'?workspaces:undefined,effect:fn=>fn(),slots:{inject:(_name,fn)=>fn(),register:(_meta,C)=>{document.querySelector('#toolbar').append(C());return()=>{}}}})};
 </script><script src="/client.js"></script></body></html>`
+// DAG 自己的管理端点：直接交给插件真实的 webServer 路由处理，不经过任何替身。
+// 冒烟断言要看结果时读 sessionData / calls，而不是读一个假服务端的状态。
+const managedThrough = async (operation, input) => {
+  const route = routes.find(item => item.kind === 'prefix' && item.path === '/thoughtdag/api')
+  assert.ok(route, 'thoughtdag 管理路由尚未注册')
+  const body = Buffer.from(JSON.stringify(input))
+  const request = { method: 'POST', url: '/thoughtdag/api/managed/' + operation, headers: { host: '127.0.0.1', origin: 'http://127.0.0.1', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, async *[Symbol.asyncIterator]() { yield body } }
+  const captured = { status: 0, body: '' }
+  const response = { writeHead: status => { captured.status = status }, end: value => { captured.body = String(value ?? '') } }
+  await route.handler(request, response, new URL(request.url, 'http://fixture'))
+  if (captured.status !== 200) throw new Error('合成管理操作失败：' + captured.body)
+  return JSON.parse(captured.body)
+}
 const server = createServer(async (req, res) => {
   if (req.url === '/') { res.writeHead(200, { 'content-type': 'text/html;charset=utf-8' }); return res.end(parentHtml) }
-  if (req.url.startsWith('/maintenance-knowledge/api/')) {
-    const chunks = []; for await (const chunk of req) chunks.push(chunk); const input = JSON.parse(Buffer.concat(chunks).toString());
-    const operation = req.url.split('/').at(-1); let value;
-    if (operation === 'list') value = { items: [...sessionStickers.values()].filter(row => input.deleted === 'deleted' ? row.deleted : !row.deleted), nextCursor: null };
-    else if (operation === 'directory') value = await graph.directory(input.workspaceId);
-    else if (operation === 'resolve') value = await graph.resolve(input);
-    else if (operation === 'preview') value = await graph.preview(input.logicalSessionId, undefined, { sourceVersionId: input.sourceVersionId, sourceAnchorId: input.sourceAnchorId });
-    else if (operation === 'get') value = sessionStickers.get(input.objectId);
-    else if (operation === 'write') { const old = sessionStickers.get(input.objectId); const object = { objectId: input.objectId, revision: (old?.revision ?? 0) + 1, deleted: input.deleted ?? false, scope: { namespace: 'stickers' }, content: { title: input.title, body: input.body } }; sessionStickers.set(input.objectId, object); value = { status: 'committed', object }; }
-    else value = { items: [], nextCursor: null };
-    res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(value));
-  }
   if (req.url === '/client.js') { res.writeHead(200, { 'content-type': 'text/javascript' }); return res.end(await readFile(new URL('../lib/client.js', import.meta.url))) }
   if (req.url === '/fixture/reference') {
     const chunks = []; for await (const part of req) chunks.push(part); const input = JSON.parse(Buffer.concat(chunks).toString())
-    const target = await graph.resolve({ nativeSessionId: input.target }), source = await graph.resolve({ nativeSessionId: input.capture.sourceSessionId }), id = 'reference-' + (refs.length + 1)
-    const relation = { namespace: 'annotation-upstream', objectId: id, referenceId: id, sourceSessionId: source.logicalSessionId, targetSessionId: target.logicalSessionId, sourceVersionId: input.capture.expectedSourceVersionId, sourceAnchorId: input.capture.anchorId, cutoffEventId: input.capture.anchorId, state: 'pending', revision: 1 }; refs.push(relation)
-    await graph.ensure(target.logicalSessionId); const doc = docs.get('main-' + target.logicalSessionId)
-    doc.graph.nodes = [node(source, 0), node(target, 1)]; doc.graph.edges.push({ id: 'relation:' + id, source: 'session:' + source.logicalSessionId, target: 'session:' + target.logicalSessionId, data: { kind: 'upstream', namespace: 'annotation-upstream', relationId: id, sourceVersionId: relation.sourceVersionId, sourceAnchorId: relation.sourceAnchorId } }); doc.revision++
-    res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ referenceId: id, created: true }))
+    // Core 的 addCrossSessionReference 在这里落地：捕获一条固定上游引用并放进目标会话草稿，
+    // 再把承载它的 upstream 连接写进目标会话的图（绑定之外的读取授权正是由它表达的）。
+    const target = await sessionReferences.resolve({ nativeSessionId: input.target })
+    const captured = await sessionReferences.capture({ operationId: input.options.operationId, sourceNativeSessionId: input.capture.sourceSessionId, targetNativeSessionId: input.target, anchorId: input.capture.anchorId, selectedText: input.capture.selectedText, ...(input.capture.expectedSourceVersionId ? { expectedSourceVersionId: input.capture.expectedSourceVersionId } : {}) })
+    const doc = await managedThrough('ensure', { logicalSessionId: target.logicalSessionId })
+    const source = await sessionReferences.resolve({ nativeSessionId: input.capture.sourceSessionId })
+    const sessionNode = (identity, index) => ({ id: 'session:' + identity.logicalSessionId, position: { x: 60, y: index * 220 + 50 }, data: { kind: 'session', label: identity.title, logicalSessionId: identity.logicalSessionId } })
+    doc.graph.nodes = [sessionNode(source, 0), sessionNode(target, 1)]
+    doc.graph.edges.push({ id: 'relation:' + captured.referenceId, source: 'session:' + source.logicalSessionId, target: 'session:' + target.logicalSessionId, data: { kind: 'upstream', namespace: 'annotation-upstream', relationId: captured.referenceId, sourceVersionId: captured.sourceVersionId, sourceAnchorId: captured.sourceAnchorId } })
+    await managedThrough('save', { objectId: doc.objectId, expectedRevision: doc.revision, title: doc.title, graph: doc.graph })
+    res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ referenceId: captured.referenceId, created: true }))
   }
   const path = new URL(req.url, 'http://fixture').pathname, route = routes.find(r => r.kind === 'exact' ? path === r.path : path.startsWith(r.path + '/'))
   if (!route) { res.writeHead(404); return res.end() }
-  try { await route.handler(req, res) } catch (error) { res.writeHead(500); res.end(error.message) }
+  try { await route.handler(req, res, path, new URL(req.url, 'http://fixture')) } catch (error) { res.writeHead(500); res.end(error.message) }
 })
 server.listen(0, '127.0.0.1'); await once(server, 'listening')
 const origin = 'http://127.0.0.1:' + server.address().port
@@ -161,7 +189,6 @@ try {
     for (const axis of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(header[axis] - canvas[axis]) < .75, label + ': switch ' + axis)
     checks.push(label)
   }
-  await alignment('desktop frame borders and stationary switch match the native conversation header')
   await page.screenshot({ path: resolve(output, 'aligned-light.png'), animations: 'disabled' })
   await page.evaluate(() => { document.documentElement.style.setProperty('--fixture-sidebar', '280px'); document.documentElement.style.setProperty('--fixture-header-height', '96px') })
   await alignment('frame follows sidebar resizing and native header height changes')
@@ -262,16 +289,30 @@ try {
   await page.locator('.dsh-td-canvas-switch').getByRole('button', { name: '对话', exact: true }).click();
   await page.evaluate(() => fixture.selectionActions['thoughtdag.session-sticker'].run({ sourceSessionId: 'native-source', anchorId: 'answer-1', messageId: 'answer-1', selectedText: '减少训练显存', role: 'assistant', occurrence: 0 }));
   const panel = ownershipFrame.getByRole('dialog', { name: '会话贴纸', exact: true }); await panel.waitFor();
-  await panel.getByRole('button', { name: '合成测试工作区', exact: true }).click();
-  await panel.getByRole('button', { name: '接收会话 Y', exact: true }).click();
-  await panel.getByText('会话贴纸已建立，引用已加入目标会话输入框，发送后参与回答。', { exact: true }).waitFor();
-  assert.equal(sessionStickers.size, 1); const sticker = [...sessionStickers.values()][0]; assert.equal(sticker.content.body.source.sourceVersionId, headVersion);
+  // 会话贴纸在当前会话自己的工作区直接开会话：面板里不再有工作区选择这一步。
+  assert.equal(await panel.getByRole('button', { name: '选择新会话所在工作区', exact: true }).count(), 0, '贴纸面板不应再要求选择工作区');
+  await panel.getByRole('button', { name: '在当前工作区新建会话', exact: true }).click();
+  await page.waitForFunction(() => fixture.actions.some(action => action.operation === 'open' && action.id.startsWith('native-new-')));
+  const newIdentity = identities.find(identity => identity.nativeSessionId === 'native-new-2');
+  assert.ok(newIdentity, '新会话应由宿主会话控制器创建');
+  // 绑定边只在新会话自己的图里，方向是「被选段会话 → 新会话」。
+  const stickerDoc = sessionData.get(JSON.stringify([newIdentity.logicalSessionId, 'thoughtdag', 'graph-' + createHash('sha256').update(newIdentity.logicalSessionId).digest('hex')]))
+  assert.ok(stickerDoc, '新会话应当带上自己的图');
+  const bound = stickerDoc.content.graph.edges.filter(edge => edge.data.kind === 'bound');
+  assert.deepEqual(bound.map(edge => [edge.source, edge.target]), [['session:source', 'session:' + newIdentity.logicalSessionId]], '绑定边方向与归属');
+  assert.equal(bound.every(edge => edge.data.relationId === undefined), true, '绑定边不得声明引用授权');
+  assert.equal(stickerDoc.content.graph.ownerSessionId, newIdentity.logicalSessionId);
+  assert.equal(sessionData.has(JSON.stringify(['native-source', 'thoughtdag', 'graph-' + createHash('sha256').update('source').digest('hex')])), false, '被选段会话的图上不重复存这条边');
+  // 引用留在新会话的草稿里，未被发送。
+  const staged = [...sessionData.values()].filter(row => row.namespace === 'annotation-upstream' && row.sessionId === newIdentity.nativeSessionId);
+  assert.equal(staged.length, 1); assert.equal(staged[0].content.state, 'pending'); assert.equal(staged[0].content.selectedText, '减少训练显存');
+  assert.equal(calls.filter(call => call[0] === 'create-session').length, 1);
   await page.screenshot({ path: resolve(output, 'session-stickers-in-map.png'), fullPage: true });
-  await panel.getByRole('button', { name: '删除对象', exact: true }).click();
-  await panel.getByRole('button', { name: '已删除', exact: true }).click();
-  await panel.getByRole('button', { name: '恢复对象', exact: true }).click();
-  await panel.getByRole('button', { name: '全部贴纸', exact: true }).click();
-  await panel.getByRole('button', { name: '接收会话 Y', exact: true }).waitFor();
-  checks.push('graph owns session sticker creation, fixed source, deletion and restoration without Sticker Board');
+  checks.push('session sticker opens a real session in the current workspace and records one topology-only bound edge in the new session graph');
   assert.deepEqual(errors, []); await writeFile(resolve(output, 'result.json'), JSON.stringify({ userData: false, modelCalls: 0, checks, errors, references: refs.map(r => ({ referenceId: r.referenceId, state: r.state })), nativeCreates: created.size }, null, 2)); console.log(JSON.stringify({ output, checks: checks.length, errors }))
 } catch (error) { await page.screenshot({ path: resolve(output, 'failure.png') }); await writeFile(resolve(output, 'failure.txt'), error.stack + '\n' + JSON.stringify({calls,refs,previews,checks,errors})); throw error } finally { await browser.close(); server.close(); await once(server, 'close') }
+
+
+
+
+

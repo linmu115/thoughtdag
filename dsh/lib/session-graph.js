@@ -14,10 +14,10 @@ export function validateSessionGraph(graph) {
   const isStructural = edge => edge.data.kind !== 'bound'
   for (const node of graph.nodes) {
     if (!identity(node.id) || nodes.has(node.id) || !Number.isFinite(node.position?.x) || !Number.isFinite(node.position?.y) || typeof node.data?.label !== 'string') fail('图节点身份或坐标无效')
-    if (!['session', 'material', 'sticker', 'note', 'placeholder'].includes(node.data.kind)) fail('图节点类型无效')
+    if (!['session', 'material', 'note', 'placeholder'].includes(node.data.kind)) fail('图节点类型无效')
     if (['session', 'material'].includes(node.data.kind) && !identity(node.data.logicalSessionId)) fail('会话节点缺少会话身份')
     if (node.data.kind === 'material' && (!identity(node.data.sourceVersionId) || !identity(node.data.sourceAnchorId))) fail('材料节点缺少固定来源')
-    if (['sticker', 'note'].includes(node.data.kind) && (!identity(node.data.namespace) || !identity(node.data.objectId))) fail('扩展节点缺少对象身份')
+    if (node.data.kind === 'note' && (!identity(node.data.namespace) || !identity(node.data.objectId))) fail('扩展节点缺少对象身份')
     nodes.set(node.id, node); incoming.set(node.id, 0); outgoing.set(node.id, [])
   }
   for (const edge of graph.edges) {
@@ -42,7 +42,12 @@ export function createSessionGraph(data, references, host = {}) {
   const graphId = sessionId => `graph-${createHash('sha256').update(sessionId).digest('hex')}`
   const document = object => ({ objectId: object.objectId, revision: object.revision, title: object.content.title, graph: validateSessionGraph(object.content.graph) })
   const find = objectId => data.list(namespace).find(object => object.objectId === objectId && !object.deleted)
-  const relation = object => { const record = object.content; return { namespace: 'annotation-upstream', objectId: object.objectId, revision: object.revision, referenceId: record.referenceId, sourceSessionId: record.sourceNativeSessionId, targetSessionId: record.targetNativeSessionId, sourceVersionId: record.sourceVersionId, sourceAnchorId: record.sourceAnchorId, cutoffEventId: record.cutoffEventId, state: record.state, targetMessageId: record.targetMessageId } }
+  // Core's local reference record carries the selected text but no source
+  // transcript, so it cannot be asked where in the reply the excerpt sits. The
+  // excerpt alone is enough for the marker list and its actions; it is also the
+  // best available anchor key, so the marker is reported at that message with
+  // occurrence 0 rather than a fabricated position.
+  const relation = object => { const record = object.content; return { namespace: 'annotation-upstream', objectId: object.objectId, revision: object.revision, referenceId: record.referenceId, sourceSessionId: record.sourceNativeSessionId, targetSessionId: record.targetNativeSessionId, sourceVersionId: record.sourceVersionId, sourceAnchorId: record.sourceAnchorId, cutoffEventId: record.cutoffEventId, state: record.state, targetMessageId: record.targetMessageId, ...(typeof record.selectedText === 'string' ? { selectedText: record.selectedText, sourceOccurrence: 0 } : {}) } }
   const page = rows => ({ items: rows, nextCursor: null })
   // SessionRecord deliberately has no title in rc.2. Titles are a separate
   // log-backed projection; never infer them from a directory record or ID.
@@ -143,6 +148,37 @@ export function createSessionGraph(data, references, host = {}) {
       const sessionId = 'graph-session-' + createHash('sha256').update(JSON.stringify([operationId, workspaceId])).digest('hex').slice(0, 32)
       await controller.create({ sessionId, workspaceId })
       return api.resolve({ nativeSessionId: sessionId })
+    },
+    /**
+     * 会话贴纸 = 一个新会话 + 一条单向拓扑绑定边。没有贴纸对象，也没有命名空间。
+     *
+     * 新会话开在 `workspaceId`（调用方从当前会话自己算出来，不额外选工作区）；
+     * 绑定边落在**新会话自己的图**里，方向为「被选段会话 → 新会话」，因此
+     * `upstreamNotice` 会把被选段会话报成新会话的上游支流。被选段会话的图上不
+     * 重复存这条边，它的支流由渲染层按反向关系呈现。
+     *
+     * 绑定是纯拓扑：不带 relationId，不授权任何读取。真正的读取授权来自 Core 的
+     * 引用，而那要等用户在新会话里自己发送。
+     */
+    async createSticker(input) {
+      const source = await api.resolve({ nativeSessionId: input.sourceSessionId })
+      const current = await api.resolve({ nativeSessionId: input.currentSessionId })
+      const target = await api.createSession(input.operationId, input.workspaceId)
+      // 先确保新会话的图存在：ensure 会写下它自己的会话卡片并成为图的主干。
+      await api.ensure(current.nativeSessionId)
+      const targetGraph = await api.ensure(target.nativeSessionId)
+      const nodes = [...targetGraph.graph.nodes]
+      for (const identity of [source, current]) {
+        if (!nodes.some(node => node.data.kind === 'session' && node.data.logicalSessionId === identity.logicalSessionId)) {
+          nodes.push({ id: `session:${identity.logicalSessionId}`, position: { x: 40 + 280 * nodes.length, y: 40 }, data: { kind: 'session', logicalSessionId: identity.logicalSessionId, label: identity.title } })
+        }
+      }
+      const sourceNode = `session:${source.logicalSessionId}`, targetNode = `session:${target.logicalSessionId}`
+      const edges = targetGraph.graph.edges.some(edge => edge.source === sourceNode && edge.target === targetNode && edge.data.kind === 'bound')
+        ? targetGraph.graph.edges
+        : [...targetGraph.graph.edges, { id: `bound:${sourceNode}:${targetNode}`, source: sourceNode, target: targetNode, data: { kind: 'bound' } }]
+      const saved = await api.save({ objectId: targetGraph.objectId, expectedRevision: targetGraph.revision, title: targetGraph.title, graph: { ...targetGraph.graph, nodes, edges } })
+      return { ...target, boundSourceSessionId: source.nativeSessionId, graphObjectId: saved.objectId, boundEdgeId: `bound:${sourceNode}:${targetNode}`, ...(input.sourceVersionId ? { sourceVersionId: input.sourceVersionId } : {}) }
     },
   }
   const extension = object => ({ objectId: object.objectId, revision: object.revision, deleted: object.deleted,

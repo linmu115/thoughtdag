@@ -1,4 +1,4 @@
-export type NodeKind = 'session' | 'sticker' | 'material' | 'note' | 'placeholder'
+export type NodeKind = 'session' | 'material' | 'note' | 'placeholder'
 export type EdgeKind = 'branch' | 'upstream' | 'knowledge' | 'pending' | 'bound'
 
 export type GraphNodeData = {
@@ -51,11 +51,15 @@ export type UpstreamRelation = {
   state: 'pending' | 'sent' | 'revoked'
   targetMessageId: string | null
   revision: number
+  /** 被选中的来源文本：来源标记要靠它在会话里重新定位选段。 */
+  selectedText?: string
+  /** 该选段在来源回复里第几次出现。 */
+  sourceOccurrence?: number
 }
 
 export const EMPTY_GRAPH: ManagedGraph = { managedSchema: 2, ownerSessionId: null, nodes: [], edges: [] }
 export const EDGE_LABELS: Record<EdgeKind, string> = { branch: '分支来源', upstream: '上游引用', knowledge: '旧关联 · 未授权', pending: '待绑定连接', bound: '上游绑定' }
-export const NODE_LABELS: Record<NodeKind, string> = { session: '会话', sticker: '会话贴纸 / 注释', material: '选段材料', note: '笔记引用', placeholder: '空卡片 · 未绑定' }
+export const NODE_LABELS: Record<NodeKind, string> = { session: '会话', material: '选段材料', note: '笔记引用', placeholder: '空卡片 · 未绑定' }
 
 export function addPlaceholder(graph: ManagedGraph, id: string, position = nextPosition(graph)): ManagedGraph {
   return { ...graph, nodes: [...graph.nodes, { id, position, data: { kind: 'placeholder', label: '新会话' } }] }
@@ -106,8 +110,8 @@ export function importRelations(graph: ManagedGraph, relations: UpstreamRelation
 }
 
 export function nodePrimaryAction(data: GraphNodeData): { operation: 'open-object'; input: { namespace: string; objectId: string } } | { operation: 'open-session'; logicalSessionId: string } | undefined {
-  if ((data.kind === 'session' || data.kind === 'sticker') && data.logicalSessionId) return { operation: 'open-session', logicalSessionId: data.logicalSessionId }
-  if ((data.kind === 'note' || data.kind === 'sticker') && data.namespace && data.objectId) return { operation: 'open-object', input: { namespace: data.namespace, objectId: data.objectId } }
+  if (data.kind === 'session' && data.logicalSessionId) return { operation: 'open-session', logicalSessionId: data.logicalSessionId }
+  if (data.kind === 'note' && data.namespace && data.objectId) return { operation: 'open-object', input: { namespace: data.namespace, objectId: data.objectId } }
   if (data.logicalSessionId) return { operation: 'open-session', logicalSessionId: data.logicalSessionId }
   return undefined
 }

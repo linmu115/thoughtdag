@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { NativeContextDocument, NativeContextRange, NativeContextSource, UserRequestEntry, UserRequestPage, SessionContextPage } from '@linmu/dsh-session-contracts'
+import type { NativeContextDocument, NativeContextRange, NativeContextSource, UserRequestEntry, UserRequestPage, SessionContextPage } from './contracts'
 import { managedApi, ManagedApiError } from './client'
 
 const operationLabels = { applied: '已生效', 'pending-next-step': '等待下一次原生模型请求', failed: '未生效', unsupported: '当前执行方式不支持' }

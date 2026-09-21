@@ -1,24 +1,34 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.25 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+**0.4.14-rc2.26 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
-本版修复「画布连线保存被拒」：图校验曾要求每条连接都必须表达上下文授权，而**上游绑定**连接（`bound`，id 形如 `bound:<来源>:<目标>`）是纯拓扑、本来就不带授权字段，于是两个会话互相绑定后整张图会被判为非法、无法保存。现在绑定连接按拓扑校验：不得声明 `relationId` / `namespace` / `sourceVersionId` / `cutoffEventId` / `state`（报「上游绑定连接不能声明上下文权限」），也不参与环检测；待绑定、上游与分支连接的校验未放宽。
+**本版把「会话贴纸」从 Maintenance 彻底解耦，并改成「一个新会话 + 一条单向拓扑边」**：在会话里选中一段已完成的 AI 回复 → 点「会话贴纸」→ **在同一个工作区新开一个真实会话**（不再让你选工作区），把这段选文以**引用**形式放进新会话的输入框**待发送**（不自动发送）。新会话的图里记一条**单向**绑定边 `source=被选段会话 → target=新会话`；被选段会话的图上不重复存这条边，它的支流由画布按反向关系呈现。
+
+绑定边只表达拓扑，**不代表内容授权**：它不带 `relationId`，授权读取仍然只来自 Core 的引用，而且只在你真正发送之后生效。**不再有贴纸对象、`stickers` 命名空间、贴纸历史列表，也不再要求选择工作区**。DAG 现在只跟本地数据与宿主打交道（`/thoughtdag/api/managed/*`）；将来 Maintenance 的接入由 adapter 承担，插件本体不依赖它。
+
+0.4.14-rc2.25：修复「画布连线保存被拒」——图校验曾要求每条连接都必须表达上下文授权，而**上游绑定**连接（`bound`，id 形如 `bound:<来源>:<目标>`）是纯拓扑、本来就不带授权字段，于是两个会话互相绑定后整张图会被判为非法、无法保存。现在绑定连接按拓扑校验：不得声明 `relationId` / `namespace` / `sourceVersionId` / `cutoffEventId` / `state`（报「上游绑定连接不能声明上下文权限」），也不参与环检测；待绑定、上游与分支连接的校验未放宽。
 
 0.4.14-rc2.24 及以前：修复初始空图缺少所属卡片，以及从错误的会话列表字段读取标题的问题。图和会话卡片读取宿主正式标题投影，旧图立即可显示当前名称；名称刷新不修改布局和修订。固定材料卡、普通对象和空卡片的自定义名称保留。
 
 会话页点“思维图”；右键添加已有会话/空卡片，按来源到接收目标连接并确认上下文引用。回到真实会话检查引用后自行发送。卡片加入图不等于授予来源读取权限。
 
+## 后续项（超出本版范围）
+
+### `sessionWriteAccess` 没有进入注入列表（待独立决策）
+
+`dsh/lib/managed-graph.js` 的写入口会调用 `service(ctx,'sessionWriteAccess')?.assertWritable()`，但 `dsh/lib/managed-entry.js` 的 `inject` 列表里没有 `sessionWriteAccess`（它由 Maintenance 提供）。**当前在未装 Maintenance 的实例上完全正确** —— 可选链直接跳过。但将来 adapter 接入 Maintenance 且它正处于恢复期时，这道写入门会被绕过。宿主官方消费者的写法是「记住曾见到该服务；若它断开则拒绝写入」，本插件尚未对齐。**本轮未改实现，待独立决策。**
+
 ## 部署方法
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.25](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.25) 下载 `dsh-thoughtdag-0.4.14-rc2.25.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.26](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.26) 下载 `dsh-thoughtdag-0.4.14-rc2.26.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.25.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
@@ -44,11 +54,11 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.25.tgz
 
 **独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块早已按这个事实兜底（`row.logicalSessionId ?? row.id`），**0.4.14-rc2.24 让前端选择器采用同一兜底**。
 
-### 打开贴纸对象跳转失败（未修复）
+### 打开贴纸对象跳转失败（0.4.14-rc2.26 随功能移除，不再适用）
 
-DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`（`dsh/lib/client.js`），而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败。打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
+曾经：DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`，而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败；打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
 
-**未修复。** 本记录只登记，不代表已修或已验证。
+本版删除了贴纸对象与 `stickers` 命名空间（会话贴纸改成「新会话 + 单向拓扑边」），这条失败路径的代码已一并移除，**问题不再存在**。此条保留仅作历史定位；注释对象的 `open-object` 路径不受影响。
 
 ### 上游绑定无法被模型自行读取（未修复，待定方案）
 
