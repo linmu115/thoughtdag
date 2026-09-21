@@ -4,6 +4,9 @@ import { createSessionGraph, validateSessionGraph } from '../lib/session-graph.j
 
 const node = id => ({ id, position: { x: 0, y: 0 }, data: { kind: 'session', logicalSessionId: id, label: id } })
 const graph = () => ({ managedSchema: 2, ownerSessionId: 'b', nodes: [node('a'), node('b')], edges: [{ id: 'edge', source: 'a', target: 'b', data: { kind: 'pending' } }] })
+// A binding is topology: `bindUpstream` writes `bound:<source>:<target>` with
+// `data = { kind: 'bound' }` and no context-authorizing field at all.
+const boundEdge = (source, target) => ({ id: `bound:${source}:${target}`, source, target, data: { kind: 'bound' } })
 
 function fixture() {
   const rows = new Map(), writes = []
@@ -89,6 +92,45 @@ test('DAG rejects cycles, missing nodes and fabricated context authorizations be
   assert.throws(() => validateSessionGraph(cycle), /循环/)
   const missing = graph(); missing.edges[0].source = 'missing'; assert.throws(() => validateSessionGraph(missing), /端点/)
   const forged = graph(); forged.edges[0].data = { kind: 'upstream' }; assert.throws(() => validateSessionGraph(forged), /引用身份/)
+})
+test('DAG accepts a topology-only upstream binding and keeps it across a save and reload', async () => {
+  const { api, rows, writes } = fixture()
+  const original = graph(); original.edges.push(boundEdge('a', 'b'))
+  const saved = await api.save({ expectedRevision: 0, title: 'bound', graph: original })
+  assert.deepEqual(saved.graph.edges.map(edge => edge.data), [{ kind: 'pending' }, { kind: 'bound' }])
+  assert.deepEqual((await api.load(saved.objectId)).graph.edges, original.edges)
+  assert.equal(writes.length, 1)
+})
+test('DAG saves two mutually bound sessions, because a binding is not a structural dependency', async () => {
+  const { api, writes } = fixture()
+  const mutual = graph(); mutual.edges.push(boundEdge('a', 'b'), boundEdge('b', 'a'))
+  assert.deepEqual(validateSessionGraph(mutual).edges.length, 3)
+  const saved = await api.save({ expectedRevision: 0, title: 'mutual', graph: mutual })
+  assert.equal(saved.graph.edges.filter(edge => edge.data.kind === 'bound').length, 2)
+  assert.equal(writes.length, 1)
+  // Only bindings are exempt: one real pending and one real upstream cycle remain rejected.
+  const pendingCycle = graph(); pendingCycle.edges.push(boundEdge('b', 'a'), { id: 'pending:b:a', source: 'b', target: 'a', data: { kind: 'pending' } })
+  assert.throws(() => validateSessionGraph(pendingCycle), /循环/)
+  const upstreamCycle = graph(); upstreamCycle.edges.push(
+    { id: 'up', source: 'a', target: 'b', data: { kind: 'upstream', relationId: 'ref-1', namespace: 'annotation-upstream' } },
+    { id: 'down', source: 'b', target: 'a', data: { kind: 'branch', relationId: 'ref-2', namespace: 'annotation-upstream' } })
+  assert.throws(() => validateSessionGraph(upstreamCycle), /循环/)
+})
+test('DAG rejects a binding that declares any context authority of its own', async () => {
+  const { api, writes } = fixture()
+  for (const forged of [{ relationId: 'ref-1' }, { namespace: 'annotation-upstream' }, { sourceVersionId: 'version-1' },
+    { cutoffEventId: 'event-1' }, { state: 'sent' }]) {
+    const candidate = graph(); candidate.edges.push({ ...boundEdge('a', 'b'), data: { kind: 'bound', ...forged } })
+    assert.throws(() => validateSessionGraph(candidate), /上游绑定连接不能声明上下文权限/)
+  }
+  const namespaceOnly = graph(); namespaceOnly.edges.push({ ...boundEdge('a', 'b'), data: { kind: 'bound', namespace: 'annotation-upstream' } })
+  await assert.rejects(api.save({ expectedRevision: 0, title: 'forged', graph: namespaceOnly }), /上游绑定连接不能声明上下文权限/)
+  assert.equal(writes.length, 0)
+  // Authorization-free is not the same as unvalidated: id and endpoints still hold.
+  const badEndpoint = graph(); badEndpoint.edges.push(boundEdge('a', 'missing'))
+  assert.throws(() => validateSessionGraph(badEndpoint), /端点/)
+  const selfLoop = graph(); selfLoop.edges.push(boundEdge('a', 'a'))
+  assert.throws(() => validateSessionGraph(selfLoop), /端点/)
 })
 test('DAG saves and deletes through session data and retains the graph when its UI is recreated', async () => {
   const rows = new Map(), writes = []

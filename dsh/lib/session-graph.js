@@ -9,6 +9,9 @@ export function validateSessionGraph(graph) {
   if (!graph || graph.managedSchema !== 2 || !(graph.ownerSessionId === null || identity(graph.ownerSessionId)) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) fail('图结构格式无效')
   if (graph.nodes.length > 10000 || graph.edges.length > 20000) fail('图结构超过大小限制')
   const nodes = new Map(), edges = new Set(), incoming = new Map(), outgoing = new Map()
+  // A bound edge is topology only: it authorizes no read, so it is validated
+  // like a placeholder and is excluded from the structural cycle check below.
+  const isStructural = edge => edge.data.kind !== 'bound'
   for (const node of graph.nodes) {
     if (!identity(node.id) || nodes.has(node.id) || !Number.isFinite(node.position?.x) || !Number.isFinite(node.position?.y) || typeof node.data?.label !== 'string') fail('图节点身份或坐标无效')
     if (!['session', 'material', 'sticker', 'note', 'placeholder'].includes(node.data.kind)) fail('图节点类型无效')
@@ -20,11 +23,12 @@ export function validateSessionGraph(graph) {
   for (const edge of graph.edges) {
     if (!identity(edge.id) || edges.has(edge.id) || !nodes.has(edge.source) || !nodes.has(edge.target) || edge.source === edge.target) fail('图连接身份或端点无效')
     const data = edge.data
-    if (!data || !['pending', 'upstream', 'branch'].includes(data.kind)) fail('图连接必须表达上下文授权')
-    if (data.kind === 'pending') {
-      if (data.relationId || data.namespace || data.sourceVersionId || data.cutoffEventId || data.state) fail('待绑定连接不能声明上下文权限')
+    if (!data || !['pending', 'bound', 'upstream', 'branch'].includes(data.kind)) fail('图连接必须表达上下文授权')
+    if (data.kind === 'pending' || data.kind === 'bound') {
+      if (data.relationId || data.namespace || data.sourceVersionId || data.cutoffEventId || data.state) fail(data.kind === 'bound' ? '上游绑定连接不能声明上下文权限' : '待绑定连接不能声明上下文权限')
     } else if (!identity(data.relationId) || data.namespace !== 'annotation-upstream') fail('上下文连接缺少 Core 引用身份')
-    edges.add(edge.id); incoming.set(edge.target, incoming.get(edge.target) + 1); outgoing.get(edge.source).push(edge.target)
+    edges.add(edge.id)
+    if (isStructural(edge)) { incoming.set(edge.target, incoming.get(edge.target) + 1); outgoing.get(edge.source).push(edge.target) }
   }
   const queue = [...incoming].filter(([, count]) => count === 0).map(([id]) => id)
   let visited = 0

@@ -1,10 +1,12 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.24 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+**0.4.14-rc2.25 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
-本版修复初始空图缺少所属卡片，以及从错误的会话列表字段读取标题的问题。图和会话卡片读取宿主正式标题投影，旧图立即可显示当前名称；名称刷新不修改布局和修订。固定材料卡、普通对象和空卡片的自定义名称保留。
+本版修复「画布连线保存被拒」：图校验曾要求每条连接都必须表达上下文授权，而**上游绑定**连接（`bound`，id 形如 `bound:<来源>:<目标>`）是纯拓扑、本来就不带授权字段，于是两个会话互相绑定后整张图会被判为非法、无法保存。现在绑定连接按拓扑校验：不得声明 `relationId` / `namespace` / `sourceVersionId` / `cutoffEventId` / `state`（报「上游绑定连接不能声明上下文权限」），也不参与环检测；待绑定、上游与分支连接的校验未放宽。
+
+0.4.14-rc2.24 及以前：修复初始空图缺少所属卡片，以及从错误的会话列表字段读取标题的问题。图和会话卡片读取宿主正式标题投影，旧图立即可显示当前名称；名称刷新不修改布局和修订。固定材料卡、普通对象和空卡片的自定义名称保留。
 
 会话页点“思维图”；右键添加已有会话/空卡片，按来源到接收目标连接并确认上下文引用。回到真实会话检查引用后自行发送。卡片加入图不等于授予来源读取权限。
 
@@ -12,11 +14,11 @@
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.24](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.24) 下载 `dsh-thoughtdag-0.4.14-rc2.24.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.25](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.25) 下载 `dsh-thoughtdag-0.4.14-rc2.25.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.24.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.25.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。

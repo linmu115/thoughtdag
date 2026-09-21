@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { upstreamNotice } from '../lib/managed-entry.js'
+import { createSessionGraph } from '../lib/session-graph.js'
 
 const graphId = sessionId => `graph-${createHash('sha256').update(sessionId).digest('hex')}`
 
@@ -59,4 +60,35 @@ test('an unknown source label falls back to the node id', () => {
     { id: 'bound:session:gone:session:self', source: 'session:gone', target: 'session:self', data: { kind: 'bound' } },
   ], [{ id: 'session:self', data: { label: '本会话' } }])
   assert.match(upstreamNotice(data([graph]), target), /- session:gone → 本会话/)
+})
+
+test('a binding that survived the DAG save path is what the notice reports', async () => {
+  // Nothing here is stubbed: validateSessionGraph accepts the graph, the DAG
+  // write path stores it, and the notice reads the stored object back.
+  const rows = new Map()
+  const extensionData = {
+    protocolVersion: 1,
+    list: namespace => [...rows.values()].filter(row => row.namespace === namespace),
+    async write(input) {
+      assert.equal(rows.get(input.objectId)?.revision ?? 0, input.expectedRevision)
+      const saved = structuredClone({ ...input, revision: input.expectedRevision + 1 })
+      rows.set(input.objectId, saved); return saved
+    },
+  }
+  const api = createSessionGraph(extensionData, { protocolVersion: 1 },
+    { sessionQuery: { readTitle: async id => ({ title: `标题 ${id}` }) } }).graph
+  const upstream = { id: 'session:up', position: { x: 0, y: 0 }, data: { kind: 'material', logicalSessionId: 'session:up',
+    sourceVersionId: 'version-1', sourceAnchorId: 'anchor-1', label: '上游研究' } }
+  const saved = await api.save({ expectedRevision: 0, title: '上游研究', graph: { managedSchema: 2, ownerSessionId: 'target',
+    nodes: [upstream, { id: 'session:target', position: { x: 0, y: 200 }, data: { kind: 'session', logicalSessionId: 'target', label: '本会话' } }],
+    edges: [
+      { id: 'bound:session:up:session:target', source: 'session:up', target: 'session:target', data: { kind: 'bound' } },
+      // A placeholder announces nothing, so the stored graph stays honest.
+      { id: 'pending:session:up:session:target', source: 'session:up', target: 'session:target', data: { kind: 'pending' } },
+    ] } })
+  assert.equal(rows.get(saved.objectId).content.graph.edges.length, 2)
+  const text = upstreamNotice(extensionData, 'target')
+  assert.match(text, /- 上游研究（session:up） → 本会话（上游绑定：仅拓扑，未读取任何内容）/)
+  assert.equal(text.match(/上游研究（session:up） → 本会话/g).length, 1)
+  assert.match(text, /拓扑信息，不是内容授权/)
 })
