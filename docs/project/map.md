@@ -1,6 +1,6 @@
 # ThoughtDAG · DSH 会话思维图
 
-2026-09-21 会话贴纸解耦与自持：**会话贴纸不再依赖 Maintenance**，改成「一个新会话 + 一条单向拓扑边」。选段 → 点「会话贴纸」→ 在当前工作区新建真实会话（不再选工作区），选段以引用形式进入新会话输入框待发送；新会话图里只写一条 `source=被选段会话 → target=新会话` 的 `bound` 边，被选段会话的图不重复存。删除贴纸对象、`stickers` 命名空间、贴纸历史列表与 `sticker` 图节点。决定见 [[DEC-sticker-independent-20260921]]，后端路由见 [[MOD-host-server]]，画布交互见 [[MOD-canvas]]，历史接入见 [[IF-maintenance-consumer]]（已 superseded），待决的写入门见 [[IMP-write-access-20260921]]。
+2026-09-21 会话贴纸解耦与自持：**会话贴纸不再依赖 Maintenance**，改成「一个新会话 + 一条单向拓扑边」。选段 → 点「会话贴纸」→ 在当前工作区新建真实会话（不再选工作区），选段以引用形式进入新会话输入框待发送；新会话图里只写一条 `source=被选段会话 → target=新会话` 的 `bound` 边，被选段会话的图不重复存。删除贴纸对象、`stickers` 命名空间、贴纸历史列表与 `sticker` 图节点。决定见 [[DEC-sticker-independent-20260921]]，后端路由见 [[MOD-host-server]]，画布交互见 [[MOD-canvas]]，历史接入见 [[IF-maintenance-consumer]]（已 superseded），待决的写入门见 [[IMP-write-access-20260921]]，本次构建与打包见 [[IMP-sticker-release-20260921]]。
 
 2026-09-21 上游拓扑绑定：连线只写 `bound` 边，不创建引用、不读取内容。设计边界见 [[DEC-reference-vs-binding]]，需求与验收范围见 [[REQ-upstream-binding]]，实现现状与未修问题见 [[IMP-binding-20260921]]，测试范围见 [[VER-binding]]。
 

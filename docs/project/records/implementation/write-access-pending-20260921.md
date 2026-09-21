@@ -5,7 +5,7 @@ title: 待决：sessionWriteAccess 未进入注入列表
 status: current
 summary: managed-graph 的写入口会调用 sessionWriteAccess.assertWritable()，但 managed-entry 的 inject 列表里没有它；未装 Maintenance 时正确，接入后恢复期会被绕过。
 progress: pending
-gap: 尚未决定是否对齐宿主官方消费者的「曾见到该服务、断开即拒写」写法。
+gap: 尚未决定是否对齐宿主官方消费者的「曾见到该服务、断开即拒写」写法；用户已决定本轮不修。
 sources:
 - workspace_id: source
   path: dsh/lib/managed-graph.js
@@ -38,3 +38,7 @@ adapter 接入 Maintenance 后，若 Maintenance 正处于恢复期（`assertWri
 3. 该决定属于 adapter 接入工作，还是本插件的独立改动。
 
 **不要在没有对应 adapter 接入决策的情况下顺手改实现。**
+
+## 用户决定（2026-09-21）
+
+**本轮不修，按现状记账。** 用户明确：「先不修，等以后需要自动回归时再补」。届时可选的实现路径是补上 adapter 接入与写入门语义，或在 adapter 工作里一并处理。本记录保留为待决项，不因发布 rc2.26 而改变状态。

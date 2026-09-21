@@ -54,3 +54,14 @@
 - 真实实例的端到端验收（空会话 composer 时序、待发送引用落位）仍未完成。
 - `sessionWriteAccess` 未进 `inject` 列表：未装 Maintenance 时正确，接入后恢复期会被绕过。**超出本轮范围、待独立决策**，见 [[IMP-write-access-20260921]]。
 - 项目地图与本文档按用户授权在本轮更新；`dsh/README.md` 的旧「选择工作区 → 新建贴纸」形态已按新语义改写。
+
+## 用户决定与出包（同轮追加）
+
+用户在收到第二步回报后作出两项决定：
+
+1. **`verify-rc2.mjs` 第三处缺陷先不修**，按现状记账，等以后需要自动回归时再补"给合成 profile 供给 Core"那一小段。前两处（peer 循环假定所有 peer 都在官方 runtime；inspector 重复 provide 已注册服务）本轮已修并留档。
+2. **先出包**，不安装、不重启、不 push、不打 tag。
+
+打包沿用仓库既有 `prepack` 流程（`cd dsh; npm pack`），产物为 `dsh-thoughtdag-0.4.14-rc2.26.tgz`（4906953 字节，SHA-256 `ed6199d2…46d1283`），放在 `artifacts/architecture-upgrade-20260920/independent-preview-dag-rc2.26/`，同目录含 `BUILD-INFO`、`CONTENTS.txt`、`SHA256SUMS`。构建过程与核实结果见 [[IMP-sticker-release-20260921]]。
+
+打包后核对的要点：`lib/` 与 `dist-app/` 里 `maintenance` 命中 **0 处**（全包 17 处全在文档/配置，性质是"说明不需要它"或历史记录）；包内 `package.json` 三处依赖均无 `@linmu`；`dist-app` 由本次 `prepack` 完整重建（写入时间与 tgz 一致），bundle 内不含已删除的「选择新会话所在工作区」文案。同时发现 `docs/INSTALL.md:86` 有一句对本产物已过时的源码 SDK 依赖表述，**如实登记但本轮未改**。
