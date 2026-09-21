@@ -317,8 +317,12 @@ export default function ManagedGraphApp() {
     setConfirmedDrafts(old => new Set([...old, result.referenceId])); await loadDocument(await managedApi.ensure(identity.logicalSessionId)); setNotice('引用已加入接收会话草稿；主干归属于接收会话。请在真实会话检查后发送。')
   }
   const chooseSession = (item: DirectoryItem) => run(async () => {
-    if (!item.logicalSessionId || !picker) throw new Error('会话缺少稳定身份，请刷新目录。')
-    const identity = await managedApi.resolve(item.logicalSessionId)
+    // The independent (non-Maintenance) deployment has a single session identity:
+    // the directory row's own id. `logicalSessionId` survives only for the managed
+    // layout, so fall back to the id exactly as the host graph module does.
+    const sessionId = item.logicalSessionId ?? item.id
+    if (!sessionId || !picker) throw new Error('会话缺少稳定身份，请刷新目录。')
+    const identity = await managedApi.resolve(sessionId)
     if (picker.purpose === 'reference' && picker.capture) await attachReference(identity, picker.capture, `${picker.operationId}:${identity.logicalSessionId}`)
     else { const next = addSessionNode(graphRef.current, identity); change(picker.position ? { ...next, nodes: next.nodes.map(node => node.id === `session:${identity.logicalSessionId}` ? { ...node, position: picker.position! } : node) } : next); setNotice('已有会话卡片已添加；未创建引用。') }
     setPicker(null)
