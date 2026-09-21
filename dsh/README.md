@@ -8,8 +8,22 @@
 
 会话页点“思维图”；右键添加已有会话/空卡片，按来源到接收目标连接并确认上下文引用。回到真实会话检查引用后自行发送。卡片加入图不等于授予来源读取权限。
 
-## 安装、配置与使用
+## 部署方法
 
-[完整命令行与手动安装教程](docs/INSTALL.md) · [下载本版本附件](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.19)
+**环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-本批为预发布，安装顺序、数据保留、更新卸载和故障定位均在教程中。无需用户的 LLM 才能完成基础配置。当前能力和未完成验收见 [发布验证记录](docs/RELEASE-20260920.md)。
+从 [Release dsh-v0.4.14-rc2.19](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.19) 下载 `dsh-thoughtdag-0.4.14-rc2.19.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+
+```powershell
+$env:DSH_HOME = '<你的 DSH_HOME>'
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.19.tgz
+```
+
+安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
+
+**用法**：在会话页点「思维图」。右键可添加已有会话或空卡片，按来源到接收目标连线并确认上下文引用；回到真实会话检查引用后自行发送。卡片加入图**不等于**授予来源读取权限。
+
+**更新**：停止 DSH，备份 DSH_HOME，`plugin add` 新 tgz，重启并刷新页面。
+**卸载**：`dsh plugin --profile web remove dsh-thoughtdag`。
+
+完整说明（安装顺序、数据保留、故障定位）：[INSTALL.md](docs/INSTALL.md)。本批为预发布，当前能力和未完成验收见 [发布验证记录](docs/RELEASE-20260920.md)。
