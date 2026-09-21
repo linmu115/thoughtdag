@@ -1,13 +1,14 @@
 // Managed DSH entry. The standalone app retains the upstream execution model.
 // This entry serves the canvas and delegates to instance-bound services.
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { createManagedGraph } from './managed-graph.js'
 
 export const name = 'thoughtdag'
-export const inject = ['webServer', 'sessions', 'sessionController', 'annotationCoreHost', 'sessionExtensionData', 'sessionReferenceContext']
+export const inject = ['webServer', 'sessions', 'sessionController', 'annotationCoreHost', 'sessionExtensionData', 'sessionReferenceContext', 'systemPrompt']
 const root = fileURLToPath(new URL('../', import.meta.url))
 const appDir = resolve(root, 'dist-app')
 const version = createRequire(import.meta.url)('../package.json').version
@@ -56,5 +57,54 @@ export async function apply(ctx, config = {}) {
   } }), 'thoughtdag: redirect')
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: prefix + '/api', handler: api }), 'thoughtdag: api')
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: prefix, handler: serve }), 'thoughtdag: static')
+  applyUpstreamContext(ctx)
   ctx.logger.info('[dsh-thoughtdag] Session canvas mounted at ' + prefix + '/')
+}
+
+/**
+ * Tell the current session which upstream branches its graph declares.
+ *
+ * A binding is topology, not material: it authorizes no read, carries no
+ * document and is deliberately absent from the reference context message. That
+ * left the model with no way to know its own upstream at all, so the graph
+ * reports its shape here instead.
+ *
+ * This goes through the prompt's dynamic context, which is evaluated per
+ * assembly and contributes nothing when empty: sessions without bindings pay no
+ * tokens, and no read or reference is created by being mentioned. `list()` is
+ * synchronous, so the provider needs no I/O.
+ */
+function applyUpstreamContext(ctx) {
+  const prompt = (() => { try { return ctx.get('systemPrompt') } catch { return undefined } })()
+  const data = (() => { try { return ctx.get('sessionExtensionData') } catch { return undefined } })()
+  if (!prompt?.context || !data?.list) return
+  ctx.effect(() => prompt.context({
+    name: 'thoughtdag:upstream-branches',
+    order: 10,
+    text: assembly => upstreamNotice(data, assembly?.agent?.session?.id),
+  }), 'thoughtdag: upstream notice')
+}
+
+/** The notice text for one session, or '' when the session declares no branch. */
+export function upstreamNotice(data, sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId) return ''
+  const objectId = `graph-${createHash('sha256').update(sessionId).digest('hex')}`
+  const object = data.list('thoughtdag').find(value => value.objectId === objectId && !value.deleted)
+  const graph = object?.content?.graph
+  if (!graph || graph.ownerSessionId !== sessionId) return ''
+  const label = id => graph.nodes.find(node => node.id === id)?.data?.label
+  const bound = graph.edges.filter(edge => edge.data?.kind === 'bound' && !edge.data?.relationId)
+  const delivered = graph.edges.filter(edge => edge.data?.kind === 'upstream' && edge.data?.relationId)
+  if (!bound.length && !delivered.length) return ''
+  const lines = []
+  if (bound.length) lines.push(...bound.map(edge => `- ${label(edge.source) ?? edge.source} → 本会话（上游绑定，尚未读取任何内容）`))
+  if (delivered.length) lines.push(...delivered.map(edge => `- ${label(edge.source) ?? edge.source} → 本会话（已有固定来源引用）`))
+  return [
+    '<dsh-thoughtdag-upstream>',
+    '思维图声明的上游支流（当前会话作为接收方）：',
+    ...lines,
+    '这是拓扑信息，不是内容授权：绑定本身未读取、也未注入任何上游正文，不要声称读过它们。',
+    '若需要上游内容，请按用户要求或参考资料走正常的引用流程；不要因为看到支流就自行展开读取。',
+    '</dsh-thoughtdag-upstream>',
+  ].join('\n')
 }
