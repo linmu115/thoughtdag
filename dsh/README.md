@@ -1,6 +1,6 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.19 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+**0.4.14-rc2.20 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
@@ -12,11 +12,11 @@
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.19](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.19) 下载 `dsh-thoughtdag-0.4.14-rc2.19.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.20](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.20) 下载 `dsh-thoughtdag-0.4.14-rc2.20.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.19.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.20.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
@@ -30,22 +30,21 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.19.tgz
 
 ## 已知问题
 
-### 添加会话卡片报「会话缺少稳定身份」
+### 添加会话卡片报「会话缺少稳定身份」（0.4.14-rc2.20 已修）
 
-在图中添加已有会话卡片时可能报：
+在图中添加已有会话卡片时曾报：
 
 ```
 会话缺少稳定身份，请刷新目录。
 ```
 
-**刷新目录不会解决。** 原因是身份字段在独立架构改名后，客户端没有跟着改：
+原因：身份字段在独立架构改名后，客户端没有跟着改。宿主返回的会话目录项（Core 的 `local-session-context.ts` 中 `directory()`）只有 `{ id, title }`，**没有 `logicalSessionId`**；而 DAG 的会话选择器要求 `item.logicalSessionId`，缺失即抛错。
 
-- 宿主返回的会话目录项（Core 的 `local-session-context.ts` 中 `directory()`）只有 `{ id, title }`，**没有 `logicalSessionId`**。
-- 而 DAG 的会话选择器要求 `item.logicalSessionId`，缺失即抛错。
+**独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块早已按这个事实兜底（`row.logicalSessionId ?? row.id`），**0.4.14-rc2.20 让前端选择器采用同一兜底**。
 
-也就是说：**独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块已经按这个事实做了兼容（用 `row.logicalSessionId ?? row.id` 兜底），但打包进前端的会话选择器没有同步，于是宿主能接受、前端先拒。
+### 打开贴纸对象跳转失败（未修复）
 
-同一处遗留还有第二个真实缺陷：DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`，而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败。打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
+DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`（`dsh/lib/client.js`），而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败。打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
 
-**未修复。** 修法需要改前端选择器与贴纸跳转，并重新构建 SPA 产物。本记录只登记，不代表已修或已验证。
+**未修复。** 本记录只登记，不代表已修或已验证。
 
