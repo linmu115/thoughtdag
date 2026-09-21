@@ -7,7 +7,7 @@ import { Background, Controls, Handle, MarkerType, Position, ReactFlow, applyNod
 import type { Connection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport } from '@xyflow/react'
 import { captureFromPreview, managedApi, parentRequest } from './client'
 import type { Capture, DirectoryItem, ExtensionObject, GraphDocument, Preview, SessionIdentity, Status } from './client'
-import { acceptCanvasBody, addPlaceholder, addSessionNode, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nextPosition, NODE_LABELS, relationPresentation, sameEdges } from './model'
+import { acceptCanvasBody, addPlaceholder, addSessionNode, arrangeBySources, bindPlaceholder, bindUpstream, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nextPosition, NODE_LABELS, relationPresentation, sameEdges } from './model'
 import type { GraphNode, GraphNodeData, ManagedGraph, UpstreamRelation } from './model'
 import { DisclosurePanel } from './DisclosurePanel'
 import { SourceContextPanel } from './SourceContextPanel'
@@ -19,7 +19,6 @@ import './shell.css'
 type CanvasNode = Node<GraphNodeData, 'managed'>
 type Picker = { purpose: 'add' | 'reference' | 'create'; nodeId?: string; capture?: Capture; operationId: string; position?: { x: number; y: number } }
 type Menu = { x: number; y: number; nodeId?: string; edgeId?: string; position?: { x: number; y: number }; returnFocus?: HTMLElement | null }
-type ConnectionDraft = { source: string; target: string; operationId: string; preview: Preview }
 type Bounds = { sourceVersionId: string; sourceAnchorId: string }
 type Cleanup = { nativeSessionId: string; referenceId: string }
 const OBJECT_TYPES = [{ namespace: 'stickers', label: '会话贴纸与已迁移注释', kind: 'sticker' as const }, { namespace: 'annotation', label: '旧注释引用', kind: 'sticker' as const }, { namespace: 'obsidian-links', label: '笔记引用', kind: 'note' as const }]
@@ -86,7 +85,7 @@ export default function ManagedGraphApp() {
   const [currentIdentity, setCurrentIdentity] = useState<SessionIdentity | null>(null)
   const [contextNodeId, setContextNodeId] = useState<string | null>(null)
   const [menu, setMenu] = useState<Menu | null>(null), [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]), [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([])
-  const [picker, setPicker] = useState<Picker | null>(null), [connectSource, setConnectSource] = useState<string | null>(null), [connection, setConnection] = useState<ConnectionDraft | null>(null)
+  const [picker, setPicker] = useState<Picker | null>(null), [connectSource, setConnectSource] = useState<string | null>(null)
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null), [preview, setPreview] = useState<Preview | null>(null), [previewBusy, setPreviewBusy] = useState(false), [previewError, setPreviewError] = useState(''), [selection, setSelection] = useState<{ text: string; capture: Capture } | null>(null)
   const [relations, setRelations] = useState<UpstreamRelation[]>([]), [relationCursor, setRelationCursor] = useState<string | undefined>(), [confirmedDrafts, setConfirmedDrafts] = useState<Set<string>>(() => new Set()), [logEdgeId, setLogEdgeId] = useState<string | null>(null)
   const [showObjects, setShowObjects] = useState(false), [objectType, setObjectType] = useState(OBJECT_TYPES[0]), [objects, setObjects] = useState<ExtensionObject[]>([]), [objectCursor, setObjectCursor] = useState<string | undefined>()
@@ -182,7 +181,7 @@ export default function ManagedGraphApp() {
     setSelectedNodeIds(old => old.filter(id => next.nodes.some(node => node.id === id)))
     setSelectedEdgeIds(old => old.filter(id => next.edges.some(edge => edge.id === id)))
     if (incoming.graph.archivedAt) {
-      setPicker(null); setConnection(null); setConnectSource(null); setRenameId(null); setShowObjects(false)
+      setPicker(null); setConnectSource(null); setRenameId(null); setShowObjects(false)
     }
   }
   const refreshLatest = useRef(refreshGraph)
@@ -352,18 +351,15 @@ export default function ManagedGraphApp() {
     if (!source || !target || source.id === target.id) return
     if (!source.data.logicalSessionId || !target.data.logicalSessionId) { change(connectPending(graphRef.current, sourceId, targetId)); setNotice('已添加待绑定连接，请保存主干；绑定真实会话并确认来源后才可读取。'); return }
     if (source.data.logicalSessionId === target.data.logicalSessionId) throw new Error('同一个会话不能引用自身。')
-    const result = await managedApi.preview(source.data.logicalSessionId, undefined, source.data.sourceVersionId, source.data.sourceAnchorId)
-    if (!result.capture) throw new Error('来源尚无可确认的已完成回复，请完成来源回复后重试。')
-    setConnection({ source: sourceId, target: targetId, operationId: crypto.randomUUID(), preview: result })
-  })
-  const confirmConnection = () => run(async () => {
-    if (!connection?.preview.capture) return
-    const target = graphRef.current.nodes.find(node => node.id === connection.target)
-    if (!target?.data.logicalSessionId) throw new Error('目标已变化，请重新选择。')
-    const oldDoc = docRef.current!, pending = graphRef.current.edges.find(edge => edge.source === connection.source && edge.target === connection.target && edge.data.kind === 'pending')
-    await attachReference(await managedApi.resolve(target.data.logicalSessionId), captureFromPreview(connection.preview, connection.preview.capture.selectedText), connection.operationId)
-    if (pending) { const old = await managedApi.canvas(oldDoc.objectId); const result = await managedApi.remove({ objectId: old.objectId, expectedRevision: old.revision, edgeIds: [pending.id], operationId: `pending:${connection.operationId}` }); if (docRef.current?.objectId === old.objectId) await loadDocument(result) }
-    setConnection(null)
+    // Binding is topology only. It used to preview the source and attach a Core
+    // reference here, which injected a bounded upstream snapshot merely because a
+    // line was drawn. Connecting must not cost context; a reference is a separate,
+    // deliberate act.
+    const bound = bindUpstream(graphRef.current, sourceId, targetId)
+    if (bound === graphRef.current) { setNotice('这两个会话已经绑定。'); return }
+    change(bound)
+    await persist(bound)
+    setNotice('已绑定上游；未创建引用，也未读取内容。')
   })
   const loadPreview = async (nodeId: string, cursor?: string, explicit?: Bounds) => {
     const node = graphRef.current.nodes.find(item => item.id === nodeId)
@@ -432,7 +428,7 @@ export default function ManagedGraphApp() {
   const activeRelation = relations.find(relation => relation.referenceId === logEdge?.data.relationId), selected = selectedNodeIds.length + selectedEdgeIds.length > 0
   const currentOwner = currentIdentity?.nativeSessionId === currentSession?.id && currentIdentity?.logicalSessionId === graph.ownerSessionId
   return <div className="mg-app" data-view-shown={shown} tabIndex={-1} onPointerDownCapture={event => { if ((event.target as Element).closest('.react-flow__edge')) event.currentTarget.focus() }} onKeyDownCapture={event => {
-    if (event.key === 'Escape') { if (!busy) { setMenu(null); setPicker(null); setConnection(null); setConnectSource(null); setShowObjects(false); setRenameId(null); setPreviewNodeId(null); setLogEdgeId(null); setSourceChoices(null); setContextNodeId(null); previewTicket.current++ } return }
+    if (event.key === 'Escape') { if (!busy) { setMenu(null); setPicker(null); setConnectSource(null); setShowObjects(false); setRenameId(null); setPreviewNodeId(null); setLogEdgeId(null); setSourceChoices(null); setContextNodeId(null); previewTicket.current++ } return }
     if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true],[role=dialog],[role=menu]')) return
     if ((event.key === 'Delete' || event.key === 'Backspace') && editable && selected) { event.preventDefault(); void remove(selectedNodeIds, selectedEdgeIds) }
     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); setMenu({ x: window.innerWidth / 2, y: 150, ...(selectedNodeIds[0] ? { nodeId: selectedNodeIds[0] } : selectedEdgeIds[0] ? { edgeId: selectedEdgeIds[0] } : {}) }) }
@@ -466,8 +462,7 @@ export default function ManagedGraphApp() {
     {contextNodeId && <Dialog title="选择要管理的来源连接" onClose={() => setContextNodeId(null)}><p>每条引用独立维护授权上限、活动窗口和实际保留材料。</p>{graph.edges.filter(edge => edge.data.relationId && (edge.source === contextNodeId || edge.target === contextNodeId)).map(edge => <button key={edge.id} onClick={() => { setContextNodeId(null); setLogEdgeId(edge.id) }}>{graph.nodes.find(node => node.id === edge.source)?.data.label ?? '来源'} → {graph.nodes.find(node => node.id === edge.target)?.data.label ?? '接收会话'}</button>)}{!graph.edges.some(edge => edge.data.relationId && (edge.source === contextNodeId || edge.target === contextNodeId)) && <p>此卡片没有已绑定的上下文引用。连接确认后才能管理来源。</p>}</Dialog>}
     {sessionStickers && <SessionStickerPanel key={sessionStickers.id} capture={sessionStickers.capture} onClose={() => { setSessionStickers(null); requestRefresh() }} />}
     {picker && <SessionPicker key={picker.operationId} picker={picker} busy={busy} error={error} onClose={() => { if (!busy) setPicker(null) }} onSelect={item => void chooseSession(item)} onCreate={workspace => void createSession(workspace)} />}
-    {connectSource && <Dialog title="选择接收会话节点" onClose={() => setConnectSource(null)}><p>箭头从当前来源指向接收方。下一步确认已完成回复的固定上限。</p><div className="mg-picker-list">{graph.nodes.filter(node => node.id !== connectSource).map(node => <button className="mg-picker-item" key={node.id} disabled={busy} onClick={() => void beginConnect(connectSource, node.id)}>{node.data.label} · {NODE_LABELS[node.data.kind]}</button>)}</div></Dialog>}
-    {connection && <Dialog title="确认上下文来源" onClose={() => { if (!busy) setConnection(null) }}><p>{graph.nodes.find(node => node.id === connection.source)?.data.label} → {graph.nodes.find(node => node.id === connection.target)?.data.label}</p><p>允许读取截至回复 <code>{connection.preview.capture?.anchorId}</code>；固定版本 <code>{connection.preview.sourceVersionId}</code>。后续新增回复不会扩大这个上限。</p><div className="mg-preview">{connection.preview.items.map(item => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '来源问题' : '已完成回复的预览片段'}</small><p>{item.text}</p></article>)}</div><p>确认后加入接收会话草稿，由你检查并发送。</p><button className="mg-primary" disabled={!editable || !status?.capabilities.references} onClick={() => void confirmConnection()}>确认固定来源并连接</button></Dialog>}
+    {connectSource && <Dialog title="选择接收会话节点" onClose={() => setConnectSource(null)}><p>箭头从当前来源指向接收方。连接只登记上游绑定，不创建引用、不读取内容。</p><div className="mg-picker-list">{graph.nodes.filter(node => node.id !== connectSource).map(node => <button className="mg-picker-item" key={node.id} disabled={busy} onClick={() => void beginConnect(connectSource, node.id)}>{node.data.label} · {NODE_LABELS[node.data.kind]}</button>)}</div></Dialog>}
     {renameId && <Dialog title="重命名卡片" onClose={() => setRenameId(null)}><input aria-label="卡片名称" maxLength={200} value={rename} onChange={event => setRename(event.target.value)} /><button disabled={!editable || !rename.trim()} onClick={() => { edit(old => ({ ...old, nodes: old.nodes.map(node => node.id === renameId ? { ...node, data: { ...node.data, label: rename.trim() } } : node) })); setRenameId(null) }}>保存名称</button></Dialog>}
     {sourceChoices && <Dialog title="选择固定来源范围" onClose={() => setSourceChoices(null)}><p>此会话有多个独立引用，请选择要预览的固定来源。</p>{sourceChoices.bounds.map(bound => <button key={`${bound.sourceVersionId}:${bound.sourceAnchorId}`} onClick={() => void loadPreview(sourceChoices.nodeId, undefined, bound)}>{bound.sourceVersionId} · 截至 {bound.sourceAnchorId}</button>)}</Dialog>}
     {previewNode && <Dialog title={`查看来源 · ${previewNode.data.label}`} onClose={() => { previewTicket.current++; setPreviewNodeId(null) }}><p>只读预览；此处的阅读不记为 AI 已读取。翻页固定本次来源版本。</p><div className="mg-preview">{previewBusy && <p>正在读取…</p>}{previewError && <p role="alert" className="mg-error">{previewError}</p>}{preview?.items.map(item => <article key={`${item.eventId}:${item.offset}`}><small>{item.role === 'user' ? '提问' : '回复'}{!item.complete ? ' · 分页片段' : ''}</small><div className="mg-source-text" onMouseUp={event => { if (item.role === 'assistant') captureSelection(event.currentTarget) }}>{item.text}</div></article>)}{selection && <div className="mg-selection-actions"><span>已选中 {selection.text.length} 字</span><button disabled={!editable} onClick={addMaterial}>制作材料卡</button><button disabled={!editable || !status?.capabilities.references} onClick={() => { setPreviewNodeId(null); setPicker({ purpose: 'reference', capture: selection.capture, operationId: crypto.randomUUID() }) }}>引用到会话</button><button disabled={busy} onClick={() => { setPreviewNodeId(null); setSessionStickers({ id: crypto.randomUUID(), capture: selection.capture }) }}>建立会话贴纸</button></div>}{preview?.nextCursor && <button disabled={previewBusy} onClick={() => void loadPreview(previewNode.id, preview.nextCursor ?? undefined)}>继续读取这一来源</button>}</div></Dialog>}

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addPlaceholder, addSessionNode, acceptCanvasBody, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nodePrimaryAction, relationPresentation, sameEdges } from './model.ts'
+import { addPlaceholder, addSessionNode, acceptCanvasBody, arrangeBySources, bindPlaceholder, bindUpstream, connectPending, createActionGuard, EDGE_LABELS, EMPTY_GRAPH, importRelations, nodePrimaryAction, relationPresentation, sameEdges } from './model.ts'
 const sessions = () => ({ ...addSessionNode(addSessionNode(EMPTY_GRAPH, { logicalSessionId: 'a', title: 'A' }), { logicalSessionId: 'b', title: 'B' }), ownerSessionId: 'b' })
 const relation = { namespace: 'annotation-upstream', objectId: 'upstream-1', referenceId: 'ref-1', sourceSessionId: 'a', targetSessionId: 'b', state: 'sent' }
 test('empty cards do not create native identities and binding preserves position and pending edges', () => {
@@ -50,6 +50,24 @@ test('explicit import is target scoped, accepts authoritative drafts and never r
   assert.deepEqual(first.edges.map(edge => edge.data.relationId), ['ref-1', 'draft'])
   assert.equal(importRelations(first, [relation]).edges.length, 2)
   assert.equal(importRelations(first, [{ ...relation, state: 'revoked' }]).edges.some(edge => edge.data.relationId === relation.referenceId), false)
+})
+test('binding an upstream session records topology only and binds a pair once', () => {
+  const graph = sessions()
+  const bound = bindUpstream(graph, 'session:a', 'session:b')
+  assert.equal(bound.edges.length, 1)
+  assert.deepEqual(bound.edges[0], { id: 'bound:session:a:session:b', source: 'session:a', target: 'session:b', data: { kind: 'bound' } })
+  // No relationId and no namespace: nothing was authorized and nothing will be read.
+  assert.equal(bound.edges[0].data.relationId, undefined)
+  assert.equal(bound.edges[0].data.namespace, undefined)
+  // The same pair binds once, even if the user drags the connection again.
+  assert.equal(bindUpstream(bound, 'session:a', 'session:b'), bound)
+  // Binding is not a delivery, so it reads as a standing connection.
+  assert.deepEqual(relationPresentation(bound.edges[0], []), { state: 'knowledge', label: EDGE_LABELS.bound, muted: false, dashed: true })
+  // A binding needs no Core authorization, so importing relations must not drop it.
+  assert.equal(importRelations(bound, [relation]).edges.some(edge => edge.id === 'bound:session:a:session:b'), true)
+  // Self-connection and unknown endpoints are refused.
+  assert.equal(bindUpstream(graph, 'session:a', 'session:a'), graph)
+  assert.equal(bindUpstream(graph, 'session:a', 'missing'), graph)
 })
 test('an authorized relation without an edge is written to the canvas exactly once', () => {
   const drawn = importRelations(sessions(), [relation])

@@ -1,5 +1,5 @@
 export type NodeKind = 'session' | 'sticker' | 'material' | 'note' | 'placeholder'
-export type EdgeKind = 'branch' | 'upstream' | 'knowledge' | 'pending'
+export type EdgeKind = 'branch' | 'upstream' | 'knowledge' | 'pending' | 'bound'
 
 export type GraphNodeData = {
   kind: NodeKind
@@ -54,7 +54,7 @@ export type UpstreamRelation = {
 }
 
 export const EMPTY_GRAPH: ManagedGraph = { managedSchema: 2, ownerSessionId: null, nodes: [], edges: [] }
-export const EDGE_LABELS: Record<EdgeKind, string> = { branch: '分支来源', upstream: '上游引用', knowledge: '旧关联 · 未授权', pending: '待绑定连接' }
+export const EDGE_LABELS: Record<EdgeKind, string> = { branch: '分支来源', upstream: '上游引用', knowledge: '旧关联 · 未授权', pending: '待绑定连接', bound: '上游绑定' }
 export const NODE_LABELS: Record<NodeKind, string> = { session: '会话', sticker: '会话贴纸 / 注释', material: '选段材料', note: '笔记引用', placeholder: '空卡片 · 未绑定' }
 
 export function addPlaceholder(graph: ManagedGraph, id: string, position = nextPosition(graph)): ManagedGraph {
@@ -115,6 +115,9 @@ export function nodePrimaryAction(data: GraphNodeData): { operation: 'open-objec
 export function relationPresentation(edge: GraphEdge, relations: UpstreamRelation[], confirmedDrafts: ReadonlySet<string> = new Set(), confirmedRevoked: ReadonlySet<string> = new Set()): { state: 'knowledge' | 'pending' | 'sent' | 'draft' | 'revoked' | 'unknown'; label: string; muted: boolean; dashed: boolean } {
   if (edge.data.kind === 'pending') return { state: 'pending', label: EDGE_LABELS.pending, muted: true, dashed: true }
   if (edge.data.kind === 'knowledge') return { state: 'knowledge', label: EDGE_LABELS.knowledge, muted: false, dashed: true }
+  // A plain binding is topology only: it grants nothing and carries no material,
+  // so it reads as a standing connection rather than a delivery state.
+  if (edge.data.kind === 'bound' && !edge.data.relationId) return { state: 'knowledge', label: EDGE_LABELS.bound, muted: false, dashed: true }
   const referenceId = edge.data.relationId
   const relation = relations.find((item) => item.referenceId === referenceId && item.namespace === edge.data.namespace)
   if (relation?.state === 'revoked' || (referenceId && confirmedRevoked.has(referenceId))) return { state: 'revoked', label: `${EDGE_LABELS[edge.data.kind]} · 已解除`, muted: true, dashed: true }
@@ -137,6 +140,22 @@ export function connectPending(graph: ManagedGraph, source: string, target: stri
   const id = `pending:${source}:${target}`
   if (graph.edges.some((edge) => edge.id === id)) return graph
   return { ...graph, edges: [...graph.edges, { id, source, target, data: { kind: 'pending' } }] }
+}
+
+/**
+ * Bind one session card upstream of another. This records topology and nothing
+ * else: it creates no Core reference, authorizes no read and injects no
+ * material, so connecting two cards costs no context. A relation may be added
+ * on top of the binding later, which is what turns it into a delivery.
+ *
+ * The identity is source+target, so the same pair binds once. Repeating a
+ * binding is a no-op rather than a second edge.
+ */
+export function bindUpstream(graph: ManagedGraph, source: string, target: string): ManagedGraph {
+  if (source === target || !graph.nodes.some((node) => node.id === source) || !graph.nodes.some((node) => node.id === target)) return graph
+  const id = `bound:${source}:${target}`
+  if (graph.edges.some((edge) => edge.id === id)) return graph
+  return { ...graph, edges: [...graph.edges, { id, source, target, data: { kind: 'bound' } }] }
 }
 
 /**

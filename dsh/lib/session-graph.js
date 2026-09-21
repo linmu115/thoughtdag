@@ -94,7 +94,7 @@ export function createSessionGraph(data, references, host = {}) {
       await data.ready?.(namespace, owner)
       const objectId = graphId(owner)
       if (input.objectId && input.objectId !== objectId) fail('图身份与所属会话不一致')
-      for (const edge of graph.edges.filter(edge => edge.data.kind !== 'pending')) {
+      for (const edge of graph.edges.filter(edge => edge.data.kind !== 'pending' && edge.data.relationId)) {
         const target = graph.nodes.find(node => node.id === edge.target)?.data.logicalSessionId ?? owner
         const source = graph.nodes.find(node => node.id === edge.source)?.data.logicalSessionId
         const described = await references.describe?.(target, edge.data.relationId)
