@@ -48,3 +48,22 @@ DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalS
 
 **未修复。** 本记录只登记，不代表已修或已验证。
 
+### 上游绑定无法被模型自行读取（未修复，待定方案）
+
+**现状**：上游绑定（`bound:source:target`）是纯拓扑，不带锚点、不授权。DAG 会把当前会话的支流清单静默注入提示（`<dsh-thoughtdag-upstream>`，见 `managed-entry.js` 的 `upstreamNotice`），所以模型**知道**有哪些上游会话，但**没有任何手段去读它们**。
+
+**为什么不能「知道 id 就直接读」**：
+
+- DSH 确实有原生跨会话查询引擎 `ctx.sessionQuery`（`@deepseek-ai/dsh-session-query`）：`observeSession` / `readSession` / `searchSessions` / `searchEvents` / `traceSession` / `listSessions` 等，**完全不涉及引用授权**，按会话 id 即可读。
+- 但它是 **Cordis 服务，不是模型工具**。运行时全部 `dsh-tool-*` 包中没有任何会话查询工具（已逐个核对：ask-user / bash / bash-persistent / cordis / fs / fs-search / goal / jobs / present / pwsh / pwsh-persistent / ralph / skill / str-replace-editor / subagent / subagent-control / todo / web / workflow）。模型手上没有可调用的入口。
+- 模型唯一可见的跨会话读取工具是 Core 的 `dsh_upstream_read` / `dsh_upstream_search`，而它们**只接受已提交引用的 `referenceId`**，实现里显式拒绝其它一切来源（`当前轮次没有这个已提交的上游引用；未发送草稿和其它会话引用不可读取`）。这是 Core 的引用机制，与 DAG 的绑定无关。
+
+**可行路线（待定）**：插件可以注册模型工具（`@deepseek-ai/dsh-tools` 暴露 `tools: ToolRuntime` 并导出 `defineTool`），由 DAG 注册一个工具，授权来源改为**当前会话图中声明的绑定**，内部调 `sessionQuery` 读取。在此之前必须先确定四件事：
+
+1. 读取范围是否严格限定在「当前会话图里的上游绑定」；
+2. 起点（默认最新优先，还是固定截止点）；
+3. 每轮与每次读取的字节/条目上限（`sessionQuery.readSession` 会返回完整日志，无内建边界）；
+4. 是否需要在读取时留下可审计回执。
+
+**决定**：本项暂不实施，留作后续。作者计划另行参考 Codex 的跨会话读取方法后处理。
+
