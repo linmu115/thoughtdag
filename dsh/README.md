@@ -27,3 +27,25 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.19.tgz
 **卸载**：`dsh plugin --profile web remove dsh-thoughtdag`。
 
 完整说明（安装顺序、数据保留、故障定位）：[INSTALL.md](docs/INSTALL.md)。本批为预发布，当前能力和未完成验收见 [发布验证记录](docs/RELEASE-20260920.md)。
+
+## 已知问题
+
+### 添加会话卡片报「会话缺少稳定身份」
+
+在图中添加已有会话卡片时可能报：
+
+```
+会话缺少稳定身份，请刷新目录。
+```
+
+**刷新目录不会解决。** 原因是身份字段在独立架构改名后，客户端没有跟着改：
+
+- 宿主返回的会话目录项（Core 的 `local-session-context.ts` 中 `directory()`）只有 `{ id, title }`，**没有 `logicalSessionId`**。
+- 而 DAG 的会话选择器要求 `item.logicalSessionId`，缺失即抛错。
+
+也就是说：**独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块已经按这个事实做了兼容（用 `row.logicalSessionId ?? row.id` 兜底），但打包进前端的会话选择器没有同步，于是宿主能接受、前端先拒。
+
+同一处遗留还有第二个真实缺陷：DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`，而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败。打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
+
+**未修复。** 修法需要改前端选择器与贴纸跳转，并重新构建 SPA 产物。本记录只登记，不代表已修或已验证。
+
