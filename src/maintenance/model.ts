@@ -139,6 +139,23 @@ export function connectPending(graph: ManagedGraph, source: string, target: stri
   return { ...graph, edges: [...graph.edges, { id, source, target, data: { kind: 'pending' } }] }
 }
 
+/**
+ * Whether two edge lists are the same connections in the same order. Used to
+ * decide if importing relations changed the canvas at all: an unchanged import
+ * must not be written back, or every load would bump the document revision.
+ */
+export function sameEdges(left: readonly GraphEdge[], right: readonly GraphEdge[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((edge, index) => {
+    const other = right[index]
+    if (!other || edge.id !== other.id || edge.source !== other.source || edge.target !== other.target) return false
+    const a = edge.data ?? {}, b = other.data ?? {}
+    return a.kind === b.kind && a.relationId === b.relationId && a.namespace === b.namespace
+      && a.state === b.state && a.sourceVersionId === b.sourceVersionId && a.cutoffEventId === b.cutoffEventId
+      && a.sourceAnchorId === b.sourceAnchorId && a.targetMessageId === b.targetMessageId
+  })
+}
+
 export function arrangeBySources(graph: ManagedGraph): ManagedGraph {
   const positions = new Map<string, { x: number; y: number }>()
   const incoming = new Map(graph.nodes.map((node) => [node.id, graph.edges.filter((edge) => edge.target === node.id && edge.data.kind !== 'knowledge').map((edge) => edge.source)]))

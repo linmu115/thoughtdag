@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addPlaceholder, addSessionNode, acceptCanvasBody, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nodePrimaryAction, relationPresentation } from './model.ts'
+import { addPlaceholder, addSessionNode, acceptCanvasBody, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nodePrimaryAction, relationPresentation, sameEdges } from './model.ts'
 const sessions = () => ({ ...addSessionNode(addSessionNode(EMPTY_GRAPH, { logicalSessionId: 'a', title: 'A' }), { logicalSessionId: 'b', title: 'B' }), ownerSessionId: 'b' })
 const relation = { namespace: 'annotation-upstream', objectId: 'upstream-1', referenceId: 'ref-1', sourceSessionId: 'a', targetSessionId: 'b', state: 'sent' }
 test('empty cards do not create native identities and binding preserves position and pending edges', () => {
@@ -50,6 +50,18 @@ test('explicit import is target scoped, accepts authoritative drafts and never r
   assert.deepEqual(first.edges.map(edge => edge.data.relationId), ['ref-1', 'draft'])
   assert.equal(importRelations(first, [relation]).edges.length, 2)
   assert.equal(importRelations(first, [{ ...relation, state: 'revoked' }]).edges.some(edge => edge.data.relationId === relation.referenceId), false)
+})
+test('an authorized relation without an edge is written to the canvas exactly once', () => {
+  const drawn = importRelations(sessions(), [relation])
+  assert.equal(drawn.edges.length, 1)
+  assert.equal(drawn.edges[0].id, `relation:${relation.referenceId}`)
+  // Re-importing is stable, so a load must not write the document again.
+  assert.equal(sameEdges(drawn.edges, importRelations(drawn, [relation]).edges), true)
+  assert.equal(sameEdges(sessions().edges, drawn.edges), false)
+  assert.equal(sameEdges(drawn.edges, []), false)
+  const relabelled = importRelations(drawn, [{ ...relation, namespace: 'other' }])
+  assert.equal(relabelled.edges[0].id, drawn.edges[0].id)
+  assert.equal(sameEdges(drawn.edges, relabelled.edges), false)
 })
 test('session stickers start their real session while notes retain object navigation', () => {
   assert.deepEqual(nodePrimaryAction({ kind: 'sticker', logicalSessionId: 'a', namespace: 'stickers', objectId: 'sticker', label: 'S' }), { operation: 'open-session', logicalSessionId: 'a' })

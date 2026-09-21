@@ -7,7 +7,7 @@ import { Background, Controls, Handle, MarkerType, Position, ReactFlow, applyNod
 import type { Connection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport } from '@xyflow/react'
 import { captureFromPreview, managedApi, parentRequest } from './client'
 import type { Capture, DirectoryItem, ExtensionObject, GraphDocument, Preview, SessionIdentity, Status } from './client'
-import { acceptCanvasBody, addPlaceholder, addSessionNode, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nextPosition, NODE_LABELS, relationPresentation } from './model'
+import { acceptCanvasBody, addPlaceholder, addSessionNode, arrangeBySources, bindPlaceholder, connectPending, createActionGuard, EMPTY_GRAPH, importRelations, nextPosition, NODE_LABELS, relationPresentation, sameEdges } from './model'
 import type { GraphNode, GraphNodeData, ManagedGraph, UpstreamRelation } from './model'
 import { DisclosurePanel } from './DisclosurePanel'
 import { SourceContextPanel } from './SourceContextPanel'
@@ -130,7 +130,26 @@ export default function ManagedGraphApp() {
     const page = await managedApi.relations(owner, after)
     setRelations(old => after ? [...old, ...page.items.filter(item => !old.some(row => row.referenceId === item.referenceId))] : page.items); setRelationCursor(page.nextCursor ?? undefined)
   }
-  const loadDocument = async (value: GraphDocument) => { accept(value); await loadRelations(value.graph.archivedAt ? null : value.graph.ownerSessionId); if (!value.graph.viewport) window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }) })) }
+  const reconcileRelationEdges = async (relations: readonly UpstreamRelation[]): Promise<void> => {
+    const current = graphRef.current
+    if (current.archivedAt) return
+    const next = importRelations(current, [...relations])
+    if (sameEdges(current.edges, next.edges)) return
+    // Layout only: no node is added and no permission is created. An authorized
+    // relation that had no edge yet must still show up as a connection.
+    await persist(next)
+  }
+  const loadDocument = async (value: GraphDocument) => {
+    accept(value)
+    if (!value.graph.archivedAt && value.graph.ownerSessionId) {
+      const page = await managedApi.relations(value.graph.ownerSessionId)
+      setRelations(page.items); setRelationCursor(page.nextCursor ?? undefined)
+      await reconcileRelationEdges(page.items)
+    } else {
+      setRelations([]); setRelationCursor(undefined)
+    }
+    if (!value.graph.viewport) window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void flow.current?.fitView({ maxZoom: 1, padding: 0.2 }) }))
+  }
   const showOwner = async (logicalSessionId: string) => { await preserveBeforeLeaving(); await loadDocument(await managedApi.ensure(logicalSessionId)) }
   const repairRelations = async () => {
     if (dirtyRef.current) await persist()
