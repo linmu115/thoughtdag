@@ -139,7 +139,8 @@ archify:
       - MOD-host-server
       - IF-host-bridge
       maintenance:
-      - IF-maintenance-consumer
+      - MOD-host-server
+      - DEC-sticker-independent-20260921
       - REQ-adapter
       core:
       - IF-suite-consumer
@@ -156,10 +157,11 @@ archify:
       - MOD-source-reading
       - REQ-disclosure
       extension:
-      - IF-maintenance-consumer
+      - MOD-host-server
       - REQ-storage
       native-api:
-      - IF-maintenance-consumer
+      - MOD-host-server
+      - MOD-context
       - REQ-context-ui
   workflow:
     source: diagrams/workflow.json
@@ -187,7 +189,7 @@ archify:
       authorize:
       - IF-suite-consumer
       freeze:
-      - IF-maintenance-consumer
+      - MOD-context
       - OBJ-context-state
       prepare:
       - IF-suite-consumer
@@ -197,7 +199,7 @@ archify:
       - IMP-migration
       record:
       - REQ-disclosure
-      - IF-maintenance-consumer
+      - MOD-host-server
       inspect:
       - MOD-source-reading
       - OBJ-context-state

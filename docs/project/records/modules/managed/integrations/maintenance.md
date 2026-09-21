@@ -1,47 +1,39 @@
 ---
 id: IF-maintenance-consumer
 kind: interface
-title: ThoughtDAG 接入 Maintenance
-status: current
-summary: 按具体能力消费图领域、扩展读取、原生上下文和创建服务。
+title: ThoughtDAG 与 Maintenance 的历史接入（已解除）
+status: superseded
+summary: ThoughtDAG 曾按能力消费 Maintenance 的图领域、扩展读取与创建服务；0.4.14-rc2.26 起插件本体不再依赖它，接入改由 adapter 承担。
+superseded_by: DEC-sticker-independent-20260921
 sources:
 - path: ../../dsh/lib/managed-graph.js
+- path: ../../src/maintenance/contracts.ts
 - path: ../../src/maintenance/client.ts
-- path: ../../src/maintenance/SourceContextPanel.tsx
 relations:
-- relation: consumes
+- relation: supersedes
   to:
-    record_id: IF-graph
-    project_id: 0d05f813-7097-47d9-9e88-3d523bb537d6
-  reason: ensure/load/save/bind/remove、身份与固定预览、relations/disclosures
-- relation: consumes
-  to:
-    record_id: IF-extension
-    project_id: 0d05f813-7097-47d9-9e88-3d523bb537d6
-  reason: 画布目录及部分已有对象的list/get；图写入使用IF-graph
-- relation: consumes
-  to:
-    record_id: IF-native-context
-    project_id: 0d05f813-7097-47d9-9e88-3d523bb537d6
-  reason: 来源面板经requestAsUser读取状态/请求目录并调整窗口、暂停、固定和释放
+    record_id: DEC-sticker-independent-20260921
+  reason: 插件本体已不消费 Maintenance；本页只保留历史定位，接入职责移交 adapter
 ---
 
-# ThoughtDAG 接入 Maintenance
+# ThoughtDAG 与 Maintenance 的历史接入（已解除）
 
-Maintenance 是独立项目 0d05f813-7097-47d9-9e88-3d523bb537d6。唯一合同按本页关系中的项目 ID 与条目 ID 定位：IF-graph、IF-extension、IF-native-context。本页只解释 ThoughtDAG 实际怎么用它们。
+**本页已不是当前实现说明。** 0.4.14-rc2.26 起，ThoughtDAG 插件本体**不再调用任何 Maintenance 接口**：没有 `/maintenance-knowledge/*`，没有 `maintenanceGraph` / `maintenanceExtensionData` / `maintenanceNativeContext`，也没有指向 Maintenance 仓库的 `file:` 依赖。将来 Maintenance 的接入由 **adapter** 承担，插件本体只跟本地数据与宿主打交道。
 
-| 插件能力 | 实际调用 | 归属与约束 |
+当前边界见 [[DEC-sticker-independent-20260921]] 与 [[IF-integration]]；本页保留，用于解释旧调用点的来源与迁移范围。
+
+## 曾经的调用点（现已移除）
+
+| 插件能力 | 曾经的实际调用 | 移除后的替代 |
 |---|---|---|
-| 当前会话主干、保存/绑定/删除 | maintenanceGraph 的 ensure/load/save/bind/remove（协议 2） | Maintenance 决定唯一主干、修订、撤销和迁移；本地只提交布局与明确对象 |
-| 会话选择、固定来源、引用/披露位置 | maintenanceGraph 的 directory/resolve/preview/relations/disclosures | 来源版本、锚点及游标保持一致；不可用时不改读最新 |
-| 图列表与已有对象 | maintenanceExtensionData.bridge 的 thoughtdag list；annotation/obsidian-links 的 list/get | 读取有界对象；图列表过滤 disclosures-* 日志对象但保留游标；不经 bridge 写图 |
-| 贴纸对象、工作区和创建会话 | maintenanceKnowledge.request(list/get stickers)；dispatch(create-workspaces/create-session) | 是独立调用点，不代表插件使用该服务的全局网络功能 |
-| 来源上下文面板 | maintenanceNativeContext.requestAsUser | 用户当前会话身份由 Host 固定；UI 只消费状态和领域操作，不实现 Agent 释放 |
+| 当前会话主干、保存/绑定/删除 | `maintenanceGraph` 的 ensure/load/save/bind/remove（协议 2） | 插件自己的 `/thoughtdag/api/managed/*`，经 Core 的 `sessionExtensionData` 落 `thoughtdag` 命名空间 |
+| 会话选择、固定来源、引用/披露位置 | `maintenanceGraph` 的 directory/resolve/preview/relations/disclosures | 同上；`preview`/`directory` 走 Core 的 `sessionReferenceContext` |
+| 图列表与已有对象 | `maintenanceExtensionData.bridge` 的 list，以及 annotation/obsidian-links 的 list/get | 同上（同一份 `objects` 表） |
+| 贴纸对象、工作区、创建会话 | `maintenanceKnowledge.request(list/get stickers)`；`dispatch(create-workspaces/create-session)` | **会话贴纸不再有对象**：改为新建真实会话 + 一条单向拓扑边；工作区由宿主 `workspaces` 投影反查；创建会话走 `/thoughtdag/api/managed/create-session`、`create-sticker` |
+| 来源上下文面板 | `maintenanceNativeContext.requestAsUser` | 宿主原生上下文入口本身不变，类型改为本地声明 |
 
-## 业务扩展接入的含义
+## 为什么必须解除
 
-ThoughtDAG 的图结构对应 thoughtdag 扩展域和 schema 2，由 Maintenance 的图领域实现与业务扩展 Adapter 维护；本插件没有实现另一套平台会话 Adapter。统一引用的权威关系仍在 Annotation 数据域，图是按主干组织的呈现与结构。
+贴纸面板挂载即请求 `POST /maintenance-knowledge/api/create-workspaces`。该路由由 Maintenance 提供，实例没装它时宿主返回 **405 + 0 字节**，而旧的 `knowledgeRequest` **先 `response.json()` 后判 `ok`**，于是抛出 `Failed to execute 'json' on 'Response': Unexpected end of JSON input`。测试夹具当时伪造了一个总是 200 的 maintenance 服务端，掩盖了这条路径——这也是本次故障长期未被发现的原因。
 
-扩展通用读取、图领域写入和原生上下文分别有自己的能力门槛。协议不匹配时显示错误；保存图不能回落到 bridge 通用保存。配置指向同一实例，源码依赖存在不证明运行副本可用。
-
-技术调用依据：[服务器分派](../../../../../../dsh/lib/managed-graph.js)、[iframe API](../../../../../../src/maintenance/client.ts)。平台真源、快照和 Engine 内部结构请按提供方地图查询，本页不复制。
+技术依据：[服务器分派](../../../../../../dsh/lib/managed-graph.js)、[本地合同声明](../../../../../../src/maintenance/contracts.ts)、[iframe API](../../../../../../src/maintenance/client.ts)。平台真源与 Engine 内部结构请按提供方地图查询，本页不复制。

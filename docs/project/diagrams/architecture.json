@@ -121,7 +121,7 @@
     {
       "id": "core",
       "type": "external",
-      "label": "Annotation / 贴纸 / 笔记",
+      "label": "Annotation Core",
       "sublabel": "外部统一引用与对象导航",
       "pos": [
         40,
@@ -135,8 +135,8 @@
     {
       "id": "maintenance",
       "type": "backend",
-      "label": "图领域接口",
-      "sublabel": "IF-graph · 身份/版本/修订",
+      "label": "DAG 宿主半",
+      "sublabel": "受管路由 · 分派 · 会话扩展存储",
       "pos": [
         360,
         1030
@@ -149,8 +149,8 @@
     {
       "id": "native-api",
       "type": "backend",
-      "label": "原生上下文接口",
-      "sublabel": "IF-native-context · requestAsUser",
+      "label": "原生上下文宿主",
+      "sublabel": "以用户身份执行 · 状态/窗口/释放",
       "pos": [
         720,
         1030
@@ -163,8 +163,8 @@
     {
       "id": "extension",
       "type": "backend",
-      "label": "扩展与创建服务",
-      "sublabel": "IF-extension · 对象读取/创建",
+      "label": "Core 会话数据端口",
+      "sublabel": "sessionExtensionData · thoughtdag 命名空间对象",
       "pos": [
         1090,
         1030
@@ -218,7 +218,7 @@
       "id": "c2",
       "from": "managed",
       "to": "bridge",
-      "label": "图领域操作",
+      "label": "受管图操作",
       "fromSide": "left",
       "toSide": "left",
       "via": [
@@ -266,7 +266,7 @@
       "id": "c4",
       "from": "bridge",
       "to": "maintenance",
-      "label": "固定来源/归属/修订",
+      "label": "sessionExtensionData 读写",
       "fromSide": "bottom",
       "toSide": "top",
       "via": [
@@ -342,7 +342,7 @@
       "id": "preview-host",
       "from": "preview",
       "to": "host-client",
-      "label": "选文引用/贴纸/导航",
+      "label": "选文引用/导航",
       "fromSide": "left",
       "toSide": "right",
       "labelAt": [
@@ -366,7 +366,7 @@
       "id": "native-call",
       "from": "bridge",
       "to": "native-api",
-      "label": "状态/窗口/固定/释放",
+      "label": "原生上下文操作",
       "fromSide": "bottom",
       "toSide": "top",
       "labelAt": [
@@ -378,7 +378,7 @@
       "id": "extension-read",
       "from": "bridge",
       "to": "extension",
-      "label": "对象目录/工作区/创建",
+      "label": "对象/图/会话身份",
       "fromSide": "right",
       "toSide": "top",
       "via": [
@@ -407,8 +407,8 @@
       "title": "读取这张图",
       "items": [
         "框表示实际职责归属；箭头表示能力交接，不推断调用先后。",
-        "图写入走图领域接口；通用扩展仅作目录和对象读取。",
-        "平台适配和原生执行在提供方；库依赖不表示项目成员。"
+        "图读写走本插件自己的 /thoughtdag/api/managed/*，经 Core 的 sessionExtensionData 落盘。",
+        "Maintenance 不再出现在本插件的调用路径上；将来由 adapter 承担。库依赖不表示项目成员。"
       ]
     }
   ],
@@ -429,7 +429,7 @@
     },
     {
       "kind": "region",
-      "label": "Maintenance：独立提供方 · 合同唯一",
+      "label": "DSH 宿主：当前实例提供的端口",
       "wraps": [
         "maintenance",
         "native-api",

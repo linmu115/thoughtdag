@@ -4,9 +4,12 @@ kind: decision
 title: 划选引用与会话贴纸的明确归属
 status: current
 summary: Core 拥有原生主会话划选，ThoughtDAG 拥有跨会话入口及会话贴纸，Sidechat 与普通贴纸分别贡献自己的动作。
+related_records: [DEC-sticker-independent-20260921]
 ---
 
 # 划选引用与会话贴纸的明确归属
+
+> **后续修订（2026-09-21）**：本页关于「会话贴纸在图内创建、删除恢复」的形态已由 [[DEC-sticker-independent-20260921]] 取代 —— 会话贴纸不再是一个存储在 `stickers` 命名空间的扩展对象，而是「一个新会话 + 一条单向拓扑边」。**归属结论本身不变**：主会话划选归 Core，跨会话引用与会话贴纸归思维图，Sticker Board 只保留普通贴纸。删掉的是贴纸对象的存储形态，不是这里划定的职责边界。
 
 来源：2026-09-18 用户在本任务逐项批注，明确要求将会话内引用交给 Core、跨会话引用和会话贴纸交给思维图，Sticker Board 只保留普通贴纸及 Obsidian 双向链接；Sidechat 核心行为保持。
 
