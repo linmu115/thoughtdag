@@ -92,19 +92,28 @@ export function upstreamNotice(data, sessionId) {
   const object = data.list('thoughtdag').find(value => value.objectId === objectId && !value.deleted)
   const graph = object?.content?.graph
   if (!graph || graph.ownerSessionId !== sessionId) return ''
-  const label = id => graph.nodes.find(node => node.id === id)?.data?.label
+  const node = id => graph.nodes.find(value => value.id === id)
+  const source = edge => {
+    const found = node(edge.source)
+    const label = found?.data?.label ?? edge.source
+    const sourceSessionId = found?.data?.logicalSessionId
+    return typeof sourceSessionId === 'string' ? `${label}（${sourceSessionId}）` : label
+  }
   const bound = graph.edges.filter(edge => edge.data?.kind === 'bound' && !edge.data?.relationId)
   const delivered = graph.edges.filter(edge => edge.data?.kind === 'upstream' && edge.data?.relationId)
   if (!bound.length && !delivered.length) return ''
   const lines = []
-  if (bound.length) lines.push(...bound.map(edge => `- ${label(edge.source) ?? edge.source} → 本会话（上游绑定，尚未读取任何内容）`))
-  if (delivered.length) lines.push(...delivered.map(edge => `- ${label(edge.source) ?? edge.source} → 本会话（已有固定来源引用）`))
+  if (bound.length) lines.push(...bound.map(edge => `- ${source(edge)} → 本会话（上游绑定：仅拓扑，未读取任何内容）`))
+  if (delivered.length) lines.push(...delivered.map(edge => `- ${source(edge)} → 本会话（已有固定来源引用）`))
   return [
     '<dsh-thoughtdag-upstream>',
-    '思维图声明的上游支流（当前会话作为接收方）：',
+    '思维图声明的上游支流（当前会话作为接收方）。括号内是来源会话 id：',
     ...lines,
-    '这是拓扑信息，不是内容授权：绑定本身未读取、也未注入任何上游正文，不要声称读过它们。',
-    '若需要上游内容，请按用户要求或参考资料走正常的引用流程；不要因为看到支流就自行展开读取。',
+    '这是拓扑信息，不是内容授权。绑定本身没有读取、也没有注入任何上游正文，不要声称读过它们。',
+    '绑定也不授予读取权限：引用才是读取授权，而读取范围固定在该引用发送时选定的位置。',
+    '只有当你**在本轮拿到一个已提交的引用**（dsh-annotation 上下文消息里有它）时，才可以用 dsh_upstream_read / dsh_upstream_search 读取它；',
+    '这些工具只接受已提交引用的 referenceId，不能凭会话 id 直接读。不要因为看到支流就自行展开，也不要声称能读未获授权的会话。',
+    '若需要某个支流的内容，请告诉用户或等待其提交引用。',
     '</dsh-thoughtdag-upstream>',
   ].join('\n')
 }

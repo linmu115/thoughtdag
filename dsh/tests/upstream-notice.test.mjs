@@ -34,7 +34,7 @@ test('a session with no bindings contributes no prompt text', () => {
 test('declared branches are reported as topology, never as read material', () => {
   const target = 'session-target'
   const nodes = [
-    { id: 'session:a', data: { label: '上游甲' } },
+    { id: 'session:a', data: { label: '上游甲', logicalSessionId: 'session:a' } },
     { id: 'session:self', data: { label: '本会话' } },
   ]
   const graph = graphFor(target, [
@@ -44,12 +44,12 @@ test('declared branches are reported as topology, never as read material', () =>
   ], nodes)
   const text = upstreamNotice(data([graph]), target)
   assert.match(text, /^<dsh-thoughtdag-upstream>/)
-  assert.match(text, /上游甲 → 本会话（上游绑定，尚未读取任何内容）/)
-  assert.match(text, /上游甲 → 本会话（已有固定来源引用）/)
+  assert.match(text, /上游甲（session:a） → 本会话（上游绑定：仅拓扑，未读取任何内容）/)
+  assert.match(text, /上游甲（session:a） → 本会话（已有固定来源引用）/)
   // The pending edge is a placeholder with no binding, so it must not be announced.
-  assert.equal(text.match(/上游甲 → 本会话/g).length, 2)
+  assert.equal(text.match(/上游甲（session:a） → 本会话/g).length, 2)
   assert.match(text, /拓扑信息，不是内容授权/)
-  assert.match(text, /不要因为看到支流就自行展开读取/)
+  assert.match(text, /不能凭会话 id 直接读/)
   assert.match(text, /<\/dsh-thoughtdag-upstream>$/)
 })
 

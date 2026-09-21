@@ -1,6 +1,6 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.23 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+**0.4.14-rc2.24 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
@@ -12,11 +12,11 @@
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.23](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.23) 下载 `dsh-thoughtdag-0.4.14-rc2.23.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.24](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.24) 下载 `dsh-thoughtdag-0.4.14-rc2.24.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.23.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.24.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
@@ -30,7 +30,7 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.23.tgz
 
 ## 已知问题
 
-### 添加会话卡片报「会话缺少稳定身份」（0.4.14-rc2.23 已修）
+### 添加会话卡片报「会话缺少稳定身份」（0.4.14-rc2.24 已修）
 
 在图中添加已有会话卡片时曾报：
 
@@ -40,7 +40,7 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.23.tgz
 
 原因：身份字段在独立架构改名后，客户端没有跟着改。宿主返回的会话目录项（Core 的 `local-session-context.ts` 中 `directory()`）只有 `{ id, title }`，**没有 `logicalSessionId`**；而 DAG 的会话选择器要求 `item.logicalSessionId`，缺失即抛错。
 
-**独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块早已按这个事实兜底（`row.logicalSessionId ?? row.id`），**0.4.14-rc2.23 让前端选择器采用同一兜底**。
+**独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块早已按这个事实兜底（`row.logicalSessionId ?? row.id`），**0.4.14-rc2.24 让前端选择器采用同一兜底**。
 
 ### 打开贴纸对象跳转失败（未修复）
 
