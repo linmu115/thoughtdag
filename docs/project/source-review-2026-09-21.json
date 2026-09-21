@@ -1,0 +1,139 @@
+{
+  "as_of": "2026-09-21",
+  "project_id": "9b066b81-bb0e-4c2a-b528-56c24499f886",
+  "scope": "上游拓扑绑定一轮的地图修订；源码有界核对，不是产品重测或部署",
+  "repository": {
+    "path": "../..",
+    "branch": "codex/independent-plugins-20260920",
+    "commit": "547f9f76f6f1aba9e74c94cbc6f7e60659edaa0a",
+    "initial_worktree_clean": true,
+    "plugin_version": "0.4.14-rc2.24"
+  },
+  "user_decision_source": {
+    "kind": "user-instruction",
+    "date": "2026-09-21",
+    "verbatim": [
+      "引用是引用，绑定是绑定，引用是 core 的逻辑，绑定是 dag 的逻辑",
+      "先不要这个锚点，单纯拓扑绑定",
+      "以末尾的会话为起点"
+    ],
+    "note": "本轮用户通过任务描述直接给出，没有可索引的宿主会话事件绑定，因此不伪造成 history-event；记录为 providers: user 的来源条目。"
+  },
+  "commits_reviewed": [
+    { "commit": "132582a", "subject": "fix: materialize authorized relations as canvas edges on load" },
+    { "commit": "595730c", "subject": "feat: binding a session connection no longer creates a reference" },
+    { "commit": "8421341", "subject": "feat: tell the session which upstream branches its graph declares" },
+    { "commit": "6c715a6", "subject": "feat: name the source session in the upstream notice" },
+    { "commit": "547f9f7", "subject": "docs: record that upstream bindings cannot be read by the model" }
+  ],
+  "selected_sources": [
+    {
+      "path": "../../dsh/README.md",
+      "sha256": "72f69ccf34a02061de4f51ef4793665e4e92059a9b371a6330feeb83d935432d",
+      "role": "插件说明与已知问题"
+    },
+    {
+      "path": "../../dsh/docs/INSTALL.md",
+      "sha256": "82e24e8a8c03e0a762498c8a03db548737b7d1eeaf3791b235797511b845e95d",
+      "role": "安装、版本表与验收边界"
+    },
+    {
+      "path": "../changes/2026-09-20-owner-session-card.md",
+      "sha256": "2f69d6bcc7f866a32d24cc3b4e6d0f609717d1755a96149962477d2a31f58f47",
+      "role": "所属卡片与初始空图修复的变更说明"
+    },
+    {
+      "path": "../changes/2026-09-15-native-context-ui.md",
+      "sha256": "177520851c2ee4e54ca4b1e107bd6bb1e763775777d34a1f1c22064999a6786a",
+      "role": "历史原生上下文 UI 说明（保留原绑定）"
+    },
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-10-session-context-graph-requirements.md",
+      "sha256": "671d89b30fe5c68fa810fcff7da6d8a266026c5fcc0a2590500c3064f36602c9",
+      "role": "原始需求规格；其 AC33 与 5.3 连接段落被本轮用户决定替代"
+    },
+    {
+      "path": "../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-15-native-agent-context-management.md",
+      "sha256": "9aaa05d99b69ca2016549dee323ca4ed00b04ad1584513951371b0b9cf14d74f",
+      "role": "原生上下文管理规格"
+    }
+  ],
+  "code_reviewed": [
+    { "path": "src/maintenance/model.ts", "sha256": "542c68a405dea7df6a917ef846ae1a464fb7701f25dee7963baf4c2b69b2c4b7", "symbols": ["bindUpstream", "sameEdges", "relationPresentation", "EDGE_LABELS"] },
+    { "path": "src/maintenance/ManagedGraphApp.tsx", "sha256": "7068bd5bb9c57d9458daa759ba38e84febd24d60d1168cf4eecf2e9b9e422154", "symbols": ["beginConnect", "loadDocument", "reconcileRelationEdges"] },
+    { "path": "dsh/lib/session-graph.js", "sha256": "3b1847fec8436629bec5864176acf4c43434e9996e37e681023939ada84b9f47", "symbols": ["validateSessionGraph", "createSessionGraph"] },
+    { "path": "dsh/lib/managed-entry.js", "sha256": "5ebf864c097e72af76f41d71d8c25f8ede430c683b7913a9c67d8df3d08ce6b1", "symbols": ["apply", "applyUpstreamContext", "upstreamNotice"] },
+    { "path": "src/maintenance/model.test.mjs", "sha256": "d7e5eed56ab54638c2fd99ff883cfc67b751ddf30eed12b9a217d1088d71ca78", "symbols": [] },
+    { "path": "dsh/tests/upstream-notice.test.mjs", "sha256": "db8cc1553483606baa7c0a667d6319fb4d2b5e212cff4cab0b8c36d191013b61", "symbols": [] }
+  ],
+  "tests_run": [
+    { "command": "node --test src/maintenance/model.test.mjs", "passed": 12, "failed": 0 },
+    { "command": "node --test dsh/tests/*.test.mjs", "passed": 21, "failed": 0 },
+    { "command": "node --test src/maintenance/*.test.mjs", "passed": 43, "failed": 0 },
+    { "command": "npx vitest run", "passed": 21, "failed": 9, "files": 3, "note": "失败全部来自 tests/session-stickers.test.tsx，属既有基线" }
+  ],
+  "probe_findings": [
+    {
+      "finding": "validateSessionGraph rejects kind='bound'",
+      "method": "一次性脚本直接调用 dsh/lib/session-graph.js 导出的 validateSessionGraph，传入含 bound 边的合法图",
+      "observed": "抛出「图连接必须表达上下文授权」",
+      "impact": "绑定边的真实保存路径未被测试覆盖且可能失败；见 IMP-binding-20260921",
+      "not_a_product_test": true
+    },
+    {
+      "finding": "tests/session-stickers.test.tsx 9 项全失败是既有基线",
+      "method": "npx vitest run（3 文件 / 30 用例）与单独运行该文件",
+      "observed": "9 failed / 9，报错为 AssertionError: expected undefined to be truthy（tests/session-stickers.test.tsx:26 的按钮查找），不是 React act() 警告",
+      "impact": "与本次改动无关：该文件最后修改为 aab4148（2026-09-18），被测组件不在本轮改动内；登记为已知基线，未修",
+      "not_a_product_test": true
+    },
+    {
+      "finding": "src/maintenance/graph-ui.test.mjs 的拖拽 flake 本轮未复现",
+      "method": "node --test src/maintenance/graph-ui.test.mjs 重复 4 次，以及 node --test src/maintenance/*.test.mjs 一次性 43 项",
+      "observed": "每次都是 7 项通过、0 失败",
+      "impact": "只登记为未复现，不写成基线失败，也不写成已修复；依赖本机 Edge 与 esbuild，需其他环境各自复核",
+      "not_a_product_test": true
+    }
+  ],
+  "baseline_failures": [
+    {
+      "path": "tests/session-stickers.test.tsx",
+      "status": "pre-existing, unfixed",
+      "failing_cases": 9,
+      "of_cases": 9,
+      "command": "npx vitest run tests/session-stickers.test.tsx"
+    }
+  ],
+  "bundle_evidence": {
+    "path": "../artifacts/architecture-upgrade-20260920/independent-preview-r23",
+    "build_info": {
+      "component": "dag",
+      "version": "0.4.14-rc2.24",
+      "sourceCommit": "8421341c7e9b96d6013f0278d96d0279c762815a",
+      "sourceDirty": true
+    },
+    "note": "包内 dag-README.md 第 45 行记录「打开贴纸对象跳转失败（未修复）」，与仓库 HEAD 的 dsh/README.md 一致；该包早于 6c715a6 与 547f9f7，因此不含后者新增的已知问题一节。"
+  },
+  "installed_copy": {
+    "path": "profiles/web/node_modules/dsh-thoughtdag/package.json",
+    "version": "0.4.14-rc2.24",
+    "note": "只读版本核对；本轮没有重启实例，也没有打开浏览器验收。"
+  },
+  "version_history": {
+    "install_guide": "dsh/docs/INSTALL.md 的 ThoughtDAG 行由 dbcea3f（0.4.14-rc2.20）经 132582a、595730c、8421341、6c715a6 更新到 0.4.14-rc2.24；HEAD 工作树干净，没有未提交的 INSTALL.md 改动。"
+  },
+  "map_changes": [
+    "project.yaml 修正失效来源路径（规格工作树多加了一层 repositories）；移除已重写为单标题的 dsh/MANAGED.md 的五个绑定",
+    "IMP-migration 与 VER-graph 改绑 dsh/docs/INSTALL.md；IMP-usage 与 IF-capability 归档",
+    "接入 source-6（INSTALL.md）与 source-7（owner-session-card 变更说明）",
+    "架构图节点标签与流程图连线语义按新行为更新",
+    "登记两处既有测试基线情况：贴纸 9 项失败（既有）、图 UI 拖拽 flake（本轮未复现）"
+  ],
+  "not_verified": [
+    "页面端到端：连线保存、重开保持、提示注入",
+    "模型侧实际收到的提示与 token 影响",
+    "2026-09-20 的 59 项串行测试批次",
+    "绑定边在真实保存路径上的通过性",
+    "图 UI 拖拽 flake 在其他机器/负载下的表现"
+  ]
+}

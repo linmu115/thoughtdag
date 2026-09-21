@@ -1,0 +1,2 @@
+# Git must retain the exact archived bytes used by the evidence hash.
+records/** -text whitespace=cr-at-eol

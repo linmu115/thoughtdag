@@ -1,8 +1,15 @@
 schema: project-map/v1
 project_id: 9b066b81-bb0e-4c2a-b528-56c24499f886
-name: ThoughtDAG · DSH 会话主干图
+name: ThoughtDAG · DSH 会话思维图
+aliases:
+- ThoughtDAG
+- 思维图
+- 会话主干图
 kind: software
 map: map.md
+workspaces:
+- id: source
+  path: ../..
 sources:
 - source_id: source-1
   path: ../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-10-session-context-graph-requirements.md
@@ -10,14 +17,17 @@ sources:
 - source_id: source-2
   path: ../../../../worktrees/session-context-graph-20260913/dsh-session-maintenance/docs/superpowers/specs/2026-09-15-native-agent-context-management.md
   format: markdown
-- source_id: source-3
-  path: ../../dsh/MANAGED.md
-  format: markdown
 - source_id: source-4
   path: ../../dsh/README.md
   format: markdown
+- source_id: source-6
+  path: ../../dsh/docs/INSTALL.md
+  format: markdown
 - source_id: source-5
   path: ../changes/2026-09-15-native-context-ui.md
+  format: markdown
+- source_id: source-7
+  path: ../changes/2026-09-20-owner-session-card.md
   format: markdown
 bindings:
 - id: REQ-main
@@ -48,32 +58,25 @@ bindings:
   heading: 7. 用户界面与 Maintenance Adapter
   status: current
   summary: 授权、窗口、保留及生效状态分别呈现，预览不冒充模型已读。
-- id: IMP-usage
-  kind: implementation
-  title: 从图进入真实会话
-  source_id: source-3
-  heading: 使用流程
-  status: current
-  summary: 卡片、连线、来源预览、日志与统一移除的实际操作。
 - id: IMP-migration
   kind: implementation
   title: 主干迁移与冲突恢复
-  source_id: source-3
-  heading: 主干与迁移
+  source_id: source-6
+  heading: 更新、卸载与数据
   status: current
-  summary: managedSchema 2、旧混合图待归属、日志分页与恢复草稿。
-- id: IF-capability
+  summary: 独立架构下的升级顺序、profile 注册与重启要求；旧混合图归属按各自记录核对。
+- id: IF-upstream-notice-local
   kind: interface
-  title: 依赖的能力与边界
-  source_id: source-3
-  heading: 能力与边界
+  title: 上游说明的宿主注册点
+  source_id: source-4
+  heading: 已知问题
   status: current
-  summary: 图协议 2、Core 引用动作及版本兼容；不复制会话全文。
+  summary: 源码位置与边界文字见本记录；详细交接约定见records/interface/IF-upstream-notice.md。
 - id: IMP-selector
   kind: implementation
   title: 原生会话与思维图切换
   source_id: source-4
-  heading: 会话与思维图切换
+  heading: 部署方法
   status: current
   summary: 真实会话标题栏切换，iframe 复用，适配宿主主题与侧栏。
 - id: MOD-context
@@ -93,8 +96,8 @@ bindings:
 - id: VER-graph
   kind: verification
   title: 主干图开发验证入口
-  source_id: source-3
-  heading: 开发验证
+  source_id: source-6
+  heading: 从源码开发
   status: current
   summary: 模型、桥接、构建和合成浏览器命令及其范围。
 - id: REQ-remove
@@ -123,7 +126,8 @@ archify:
     source: diagrams/architecture.json
     node_records:
       user:
-      - IMP-usage
+      - IMP-binding-20260921
+      - REQ-upstream-binding
       managed:
       - MOD-canvas
       - REQ-main
@@ -167,17 +171,19 @@ archify:
       - OBJ-main
       - REQ-create
       connect:
-      - IF-suite-consumer
-      - REQ-create
+      - REQ-upstream-binding
+      - DEC-reference-vs-binding
+      - IMP-binding-20260921
+      - IF-upstream-notice-local
       enter:
       - MOD-canvas
-      - IMP-usage
+      - IMP-migration
       send:
-      - IMP-usage
+      - IMP-binding-20260921
       - REQ-disclosure
       unsupported:
       - IF-host-bridge
-      - IF-capability
+      - IF-upstream-notice-local
       authorize:
       - IF-suite-consumer
       freeze:
@@ -188,7 +194,7 @@ archify:
       - MOD-host-shell
       open-target:
       - MOD-host-shell
-      - IMP-usage
+      - IMP-migration
       record:
       - REQ-disclosure
       - IF-maintenance-consumer

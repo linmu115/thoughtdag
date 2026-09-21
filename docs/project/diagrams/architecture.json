@@ -38,7 +38,7 @@
       "id": "managed",
       "type": "frontend",
       "label": "画布编辑",
-      "sublabel": "目录 · 卡片 · 连接确认",
+      "sublabel": "目录 · 卡片 · 拓扑绑定",
       "pos": [
         720,
         100

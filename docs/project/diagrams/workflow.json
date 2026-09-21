@@ -51,8 +51,8 @@
       "lane": "main",
       "col": 2,
       "type": "backend",
-      "label": "确认有向引用",
-      "sublabel": "已绑定来源、接收方和完成回复",
+      "label": "发布上游拓扑绑定",
+      "sublabel": "只写 bound 边；不建引用、不读取",
       "width": 194
     },
     {
@@ -156,13 +156,13 @@
       "id": "e1",
       "from": "card",
       "to": "connect",
-      "label": "已绑定且可确认来源"
+      "label": "两端都是真实会话"
     },
     {
       "id": "e2",
       "from": "connect",
       "to": "authorize",
-      "label": "add-reference"
+      "label": "另经 Core 提交引用才授权读取"
     },
     {
       "id": "fixed-source",
@@ -209,7 +209,7 @@
       "id": "unsupported-in",
       "from": "connect",
       "to": "unsupported",
-      "label": "能力/来源不可用",
+      "label": "身份/保存失败",
       "role": "branch",
       "variant": "dashed"
     },

@@ -3,12 +3,11 @@ id: IMP-current
 kind: implementation
 title: 当前受管图能做什么
 status: current
-summary: 现有源码实现主干、真实会话、固定引用、撤销和三层上下文界面。
+summary: 现有源码实现主干、真实会话、拓扑绑定、固定引用、撤销和三层上下文界面。
 progress: implemented
-gap: 本轮未重跑原生模型、真实副本和长时并发；复杂旧图归属按具体资料验收。托管引擎额外适配明确不在阶段范围。
+gap: 本轮未重跑原生模型、真实副本和长时并发；复杂旧图归属按具体资料验收。托管引擎额外适配明确不在阶段范围。绑定边能否保存、绑定对模型不可读、贴纸跳转未修见绑定实现记录。
 sources:
 - path: ../../dsh/package.json
-- path: ../../dsh/MANAGED.md
 - path: ../../dsh/README.md
 - path: ../../src/maintenance/ManagedGraphApp.tsx
 - path: ../../src/maintenance/SourceContextPanel.tsx
@@ -40,11 +39,14 @@ relations:
 
 本次只读核对的 dsh-thoughtdag 版本为 0.4.14-rc2.13，目标 DSH 0.1.5-rc.2。源码快照以 source-review-2026-09-16.json 为准；历史部署报告对应报告所列实例和版本。
 
+**后续版本**：2026-09-21 的 0.4.14-rc2.24 改动了连线语义并补齐关系边，见 [[IMP-binding-20260921]]。下表描述的各项能力除非该记录另有说明，仍然成立；下表所在版本仍是 0.4.14-rc2.13。
+
 | 功能 | 当前行为 | 条件或限制 |
 |---|---|---|
 | 单会话主干 | 按需 ensure，已有同会话主干复用 | 普通浏览不批量建图；非当前主干的操作先确认归属 |
 | 卡片与开始会话 | 目录分页、占位、工作区确认、绑定、进入真实会话 | 取消不创建；用户自己发送 |
-| 固定引用 | 完成回复/版本确认，多父来源；合法入向引用准备 | pending 线不能读；来源更新不扩旧上限 |
+| 上游拓扑绑定 | 连线只写 `bound` 边：不创建引用、不弹确认、不读取上游正文 | 2026-09-21 起的行为，见 [[REQ-upstream-binding]]；绑定不等于读取授权 |
+| 固定引用 | 完成回复/版本确认，多父来源；合法入向引用准备 | pending 与绑定边都不能读；来源更新不扩旧上限 |
 | 阅读与管理 | 固定预览、位置日志、请求目录、不连续窗口、暂停/恢复、固定/释放 | 预览不冒充模型已读；实际释放以服务回执和原生执行边界为准 |
 | 删除与归档 | 领域撤销、Core 清理重试、事件/可见性刷新，归档只读 | 既有回答保留；恢复不复活已撤销关系 |
 | 编辑与恢复 | 手动布局、主动重排、修订合并、无权限恢复草稿 | 旧混合图待归属；恢复草稿不复制活动授权 |
@@ -58,4 +60,4 @@ relations:
 - **仍是提议**：[[DEC-pending-simplification|材料卡、对象浏览器和手动保存的进一步精简]]，没有擅自认定删除。
 - **另一入口**：独立 ThoughtDAG 的模型代理、Session Atlas 和独立画布问答保留，未被本受管插件使用。
 
-能力兼容见 [[IF-maintenance-consumer]] 与 [[IF-suite-consumer]]；使用方式见 [[IMP-usage]]、[[IMP-migration]]；证据与本次检查见 [[VER-product-evidence]]、[[VER-adoption]]。
+能力兼容见 [[IF-maintenance-consumer]] 与 [[IF-suite-consumer]]；使用方式见 [[IMP-binding-20260921]]、[[IMP-migration]]；证据与本次检查见 [[VER-binding]]、[[VER-product-evidence]]、[[VER-adoption]]。
