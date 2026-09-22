@@ -1,6 +1,9 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.26 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+> 当前运行环境：**DSH 0.1.5-rc.2 实例 / web profile**（0.1.5rc2）。其他 DSH 版本尚未验收。
+
+
+**0.4.14-rc2.27 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
@@ -24,11 +27,11 @@
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.26](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.26) 下载 `dsh-thoughtdag-0.4.14-rc2.26.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.27](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.27) 下载 `dsh-thoughtdag-0.4.14-rc2.27.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.27.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
@@ -54,7 +57,7 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
 
 **独立部署下 `id` 就是会话身份**，不再有「逻辑身份 / 原生身份」两套。宿主侧的图模块早已按这个事实兜底（`row.logicalSessionId ?? row.id`），**0.4.14-rc2.24 让前端选择器采用同一兜底**。
 
-### 打开贴纸对象跳转失败（0.4.14-rc2.26 随功能移除，不再适用）
+### 打开贴纸对象跳转失败（0.4.14-rc2.27 随功能移除，不再适用）
 
 曾经：DAG 打开**贴纸**对象时，向宿主 `resolve` 接口发送的是 `logicalSessionId`，而宿主只接受 `nativeSessionId` 或 `logicalSessionId` 二选一且校验严格，两条分支都会失败；打开注释对象的那条路径已经改用 `nativeSessionId`，贴纸这条漏了。
 

@@ -17,7 +17,8 @@
     "desktop": "npm run build && cd desktop && electron .",
     "cli:build": "esbuild cli/src/main.ts --bundle --platform=node --format=esm --target=node20 --define:import.meta.env={} --outfile=cli/dist/thoughtdag.mjs --log-level=warning",
     "dsh:build": "node dsh/scripts/build.mjs .",
-    "test:ownership": "vitest run"
+    "test:ownership": "vitest run",
+    "package:release": "node scripts/package-release.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",
@@ -75,7 +76,9 @@
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
     "vitepress": "^1.6.4",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "esbuild": "0.28.2",
+    "tar": "7.5.22"
   },
   "description": "An infinite canvas where LLM conversations grow into an editable thought graph. Read papers into maps; every answer knows where it came from.",
   "repository": {
@@ -91,5 +94,6 @@
     "knowledge-graph",
     "research-tool"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "packageManager": "npm@11.5.1"
 }

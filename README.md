@@ -1,6 +1,9 @@
 # ThoughtDAG for DSH
 
-**0.4.14-rc2.26 · DSH 0.1.5-rc.2 · Node.js 24**
+> 当前运行环境：**DSH 0.1.5-rc.2 实例 / web profile**（0.1.5rc2）。其他 DSH 版本尚未验收。
+
+
+**0.4.14-rc2.27 · DSH 0.1.5-rc.2 · Node.js 24**
 
 为每个 DSH 会话提供可编辑思维图：放入真实会话卡片、组织上下游关系、创建会话贴纸，并回到原生会话继续对话。
 
@@ -12,11 +15,11 @@
 
 ## 安装
 
-先安装 Annotation Core，再从 [dsh-v0.4.14-rc2.26 Release](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.26) 下载 `dsh-thoughtdag-0.4.14-rc2.26.tgz`。不要用 npm 旧包或 standalone 桌面包代替。
+先安装 Annotation Core，再从 [dsh-v0.4.14-rc2.27 Release](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.27) 下载 `dsh-thoughtdag-0.4.14-rc2.27.tgz`。不要用 npm 旧包或 standalone 桌面包代替。
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.27.tgz
 ```
 
 安装到原来的 Home/profile，再按原来的方式正常启动 DSH。无需手工重复注册 bundle。[完整安装说明](dsh/docs/INSTALL.md)。
@@ -33,6 +36,8 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
 
 仅有上游拓扑绑定时，模型获知关系不等于能够读取来源正文；独立绑定读取工具尚未实现。真实 UI、全部上下文操作和各插件组合应按发布记录分别验收。
 
-[DSH 详细说明与已知限制](dsh/README.md) · [当前项目地图](docs/project/map.md)。源码构建仍有本地开发依赖限制，见安装说明的“从源码开发”；运行包不要求作者的本机工作树。
+[DSH 详细说明与已知限制](dsh/README.md) · [当前项目地图](docs/project/map.md)。源码构建使用锁定工具链与仓库内 SDK，见 [独立构建说明](docs/BUILD.md)；无需作者本机工作树。
 
 仓库也保留 standalone 原型。其历史介绍与构建方式见 [原根 README 快照](docs/history/20260922-README.md)，这部分不作为当前 DSH 部署流程。之前依赖 Maintenance 的说明也仅作为历史保留。
+
+源码开发：[独立克隆、锁定依赖与打包](docs/BUILD.md)。
