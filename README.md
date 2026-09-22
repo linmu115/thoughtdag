@@ -1,122 +1,38 @@
-> DSH 独立插件交付：**0.4.14-rc2.19**，面向 DSH 0.1.5-rc.2，基础能力仅依赖 Core。请先阅读 [DSH 插件 README](dsh/README.md) 和 [安装教程](dsh/docs/INSTALL.md)。下文 standalone 原型与历史组合不作为本批安装入口。
+# ThoughtDAG for DSH
 
-# ThoughtDAG · DSH session graph fork
+**0.4.14-rc2.26 · DSH 0.1.5-rc.2 · Node.js 24**
 
-本轮独立组件升级候选及边界见[2026-09-20 架构升级](docs/changes/2026-09-20-independent-components.md)。源码候选不代表运行副本已升级。
+为每个 DSH 会话提供可编辑思维图：放入真实会话卡片、组织上下游关系、创建会话贴纸，并回到原生会话继续对话。
 
-Main graph headings, session cards and the graph list now follow current session names, including existing graphs that cached an ID. Rename sessions in the conversation page; materials and unbound drafts retain their own names. See [name synchronization](docs/changes/2026-09-15-current-session-names.md).
+## 依赖与数据
 
-[中文](README_ZH.md) · [DSH installation and use](dsh/README.md) · [Detailed graph guide](dsh/MANAGED.md) · [Standalone app](#standalone-app)
+运行依赖 Annotation Core 和 DSH 宿主服务。**不依赖 Session Maintenance、Launcher、Obsidian Bridge、普通贴纸或 Sidechat。** 图数据通过 Core 的会话数据端口保存在当前 DSH 实例中，DAG 负责图校验、布局与交互。
 
-This fork adds a per-session context graph to **DeepSeek Harness 0.1.5-rc.2**. Open **对话 / 思维图** in the session header, organize sources on the canvas, and continue in the real DSH conversation. The standalone ThoughtDAG application remains available separately.
+当前代码已移除对 Maintenance 的业务调用。源码中保留的 `managed` 路径或文件名是历史命名，不代表需要安装维护引擎；未来外部维护接入应由独立 adapter 实现。
 
-The current DSH package source version is **`dsh-thoughtdag` 0.4.14-rc2.13**. This is a custom RC2 integration, not the upstream plugin release. The version identifies the code and locally verified package; it does not imply that a matching npm package or public release asset has been published.
+## 安装
 
+先安装 Annotation Core，再从 [dsh-v0.4.14-rc2.26 Release](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.26) 下载 `dsh-thoughtdag-0.4.14-rc2.26.tgz`。不要用 npm 旧包或 standalone 桌面包代替。
 
-The view selector now uses a shared sliding thumb with fixed labels, continuous reversal and host theme colors. See [selector behavior and validation](docs/changes/2026-09-15-sliding-view-selector.md).
-
-## What the DSH panel does
-
-| Capability | Behavior |
-|---|---|
-| One main graph per receiving session | A reference from source X to target Y belongs to Y's graph. Opening the panel reuses that session's graph; it does not generate graphs for every historical session. |
-| Real session cards | Existing cards open their native conversation. Empty cards ask for a workspace when you start them, then create and bind a real session. |
-| Context connections | A confirmed connection grants access to a fixed source version through a chosen completed reply. Empty cards and pending connections grant no reading permission. |
-| Vertical layout | Sources appear above the receiver, with top and bottom handles. Existing saved positions and explicit right-click placement remain intact. |
-| Native appearance and continuous transitions | Cards, menus, previews and logs follow DSH's theme. Frame borders track the native conversation, including its collapsed rail. The switch stays in place; brief fades reverse smoothly and respect reduced motion. |
-| Reading transparency | An edge opens its fixed source boundary and disclosure log: returned ranges, delivery status, continuation position, limits and truncation. |
-| Reference and archive sync | Deleting a blue source reference or archiving a session updates the authoritative graph. Refresh preserves unsaved layout edits while applying reference removals. |
-
-The panel uses Maintenance for session identity, graph storage and fixed source access, and Annotation Core for reference preparation. The embedded view has no persistent chat composer, does not keep a second copy of native conversation history, and does not run its own model requests.
-
-Empty canvases offer direct card actions and workspace-first session selection. On-demand canvas help explains flow direction and keyboard controls; compact navigation opens in a drawer. Switching reuses the existing iframe and ends its transition work when settled. See the [alignment and transition report](docs/changes/2026-09-15-aligned-fluid-graph-ui.md).
-
-## Quick start in DSH
-
-Install the matching RC2 package set in one instance, following the [plugin guide](dsh/README.md). Then:
-
-1. Open a real session and select **思维图** in its header.
-2. Right-click empty canvas space to **添加空卡片** or **添加已有会话**. Existing sessions are selected through their workspace.
-3. Right-click a card and select **在此节点开始会话**. An empty card asks for a workspace and confirmation; cancelling creates nothing. A bound card opens its existing session.
-4. Drag from a source card's bottom handle to the receiver's top handle, or choose **连接到节点**. Confirm the completed reply and fixed source version before creating a reference.
-5. Continue in the real conversation. The plugin prepares valid incoming references, preserves the draft and attachments, and leaves sending to you.
-
-| Right-click location | Available actions |
-|---|---|
-| Empty canvas | Add an empty card or existing session; arrange by sources; fit the graph; associate an existing object; explicitly import the current target's existing references. |
-| Card | Start/open its real session; preview its source; connect to another card; rename; remove. |
-| Edge | Inspect the fixed source and reading positions; confirm a pending connection's source; remove the edge. |
-
-Touch devices can use the card's **⋯** button and **画布更多操作**. Keyboard access includes **Shift+F10**, arrow keys, **Escape**, and **Delete/Backspace** for selected items. Removal uses the same reference-revocation operation across entry points.
-
-## Bounded context, disclosed as needed
-
-With the matching `maintenanceNativeContext` protocol 1 host, right-click a card and open **管理来源上下文**, or inspect a connection. The panel separates the immutable authorization boundary, selected disjoint windows, actually retained native input materials, and historical disclosure coverage. Browse real user requests, preview their fixed question/answer pair, select ranges, and explicitly save the window. A user preview is not model delivery.
-
-Pause/resume, source-scoped release and user pins use the same current-session service as native tools. Source-scoped release preserves other independent holders; releasing a whole shared material is separately labelled. Pending release is shown as pending until the native surface receipt confirms it. Refresh preserves an unsaved window plan, and retrying an uncertain mutation reuses its operation identity. Missing capabilities are disabled. This stage targets the native DSH Agent, not hosted engine context rewriting. See [implementation and synthetic UI checks](docs/changes/2026-09-15-native-context-ui.md).
-
-A reference records a source version and the last completed reply it may read. Later source messages do not expand that boundary. The first send can include the selected reply's question-and-answer turn within the configured budget; earlier authorized history is available through bounded read/search tools as needed. Connecting a source does not insert its complete history into every request.
-
-Use **查看来源** on a card for a read-only preview. If a source has several independent fixed references, choose the range to inspect. Selected text can still become a material card, a reference to another session, or a session sticker.
-
-Use **查看固定来源与读取位置** on an edge to inspect the reading log. **已准备** means delivery is not confirmed; **已返回** records returned ranges; **未交付** records failure. A search hit does not mean the whole source was read, and your own preview does not mean the AI read it. Logs also expose continuation positions, incomplete ranges, budget limits and early-record trimming.
-
-## Delete, archive and recover
-
-- With [Session Sticker Board](https://github.com/linmu115/dsh-session-sticker-board/tree/codex/rc2-session-context-graph), blue markers beside source selections open referenced sessions. Right-click a marker to enter a session or delete one exact reference. Other references at the same selection and ordinary red stickers remain.
-- Removing graph cards or edges revokes affected references. It does not delete real sessions or rewrite existing answers.
-- Archiving a source or target revokes its active references and clears affected pending connections. Its own graph becomes archived; an already open graph becomes read-only and retains unsaved layout for copying to a draft.
-- Restoring a session restores its archived main graph, but does not restore revoked references or cleared connections. A manually deleted graph is not restored by session recovery.
-- Changes are checked on relevant events, panel reopening and window focus; a visible graph also checks every 10 seconds. Conflicts preserve local edits and offer a layout-only recovery draft.
-- If starting a node fails, the panel keeps the service's error and offers **刷新引用并重试开始** or **返回对话检查**. Reference admission is not skipped to force an open or send.
-
-Older graphs retain their original objects during migration. Unconfirmed legacy lines remain metadata, not active context permissions. Explicitly importing existing target references does not create new permissions or revive removed references. See [ownership and migration](dsh/MANAGED.md#主干与迁移).
-
-## Build the DSH plugin
-
-Use Node **22.19+ in the 22.x line, or 24+**, as declared by the [plugin package](dsh/package.json). From this repository:
-
-```sh
-npm ci
-npm run dsh:build
-cd dsh
-npm pack
+```powershell
+$env:DSH_HOME = '<你的 DSH_HOME>'
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.26.tgz
 ```
 
-This builds the embedded SPA and produces a local `dsh-thoughtdag-0.4.14-rc2.11.tgz`. Install it with the corresponding Maintenance and Annotation packages; [the plugin guide](dsh/README.md) lists the verified combination and target-profile flow. An upstream download, an unqualified package name or `@latest` does not select this fork.
+安装到原来的 Home/profile，再按原来的方式正常启动 DSH。无需手工重复注册 bundle。[完整安装说明](dsh/docs/INSTALL.md)。
 
-Local verification:
+## 使用
 
-```sh
-node --experimental-strip-types --test src/maintenance/model.test.mjs src/maintenance/client.test.mjs src/maintenance/sync.test.mjs dsh/tests/managed-host.test.mjs dsh/tests/managed-client.test.mjs
-npm run dsh:build
-```
+- 打开真实会话，选择“思维图”，默认显示所属会话卡片。
+- 添加已有会话或空卡片，调整布局；名称跟随原生会话当前标题。
+- 上下文引用边限定读取来源和范围，由 Core 保存引用与发送状态。
+- 拓扑绑定边只记录关系，不自动授权模型读取上游会话。
+- 在已完成的 AI 回复中选文并创建“会话贴纸”，会在同一工作区创建新会话，把选文引用放进输入区等待用户发送，并在新会话图中保存来源到目标的单向绑定。此功能不依赖普通贴纸插件。
 
-The latest graph/reference change has 35 passing synthetic tests and a successful TypeScript/build check. See [graph synchronization](docs/changes/2026-09-15-graph-reference-refresh.md), [layout and theme](docs/changes/2026-09-15-vertical-layout-dsh-theme.md), and the [combined lifecycle verification report](https://github.com/linmu115/dsh-session-maintenance/blob/codex/rc2-session-context-graph/docs/reports/2026-09-15-graph-reference-lifecycle-release.md). Local package and instance verification are separate from public distribution.
+## 当前边界与开发
 
-## Standalone app
+仅有上游拓扑绑定时，模型获知关系不等于能够读取来源正文；独立绑定读取工具尚未实现。真实 UI、全部上下文操作和各插件组合应按发布记录分别验收。
 
-The standalone web/desktop application retains ThoughtDAG's editable question-and-answer canvas, Session Atlas, PDF/file readers, model connections, clipping, export, and local conversation search. Its canvas execution and storage are separate from the managed DSH panel.
+[DSH 详细说明与已知限制](dsh/README.md) · [当前项目地图](docs/project/map.md)。源码构建仍有本地开发依赖限制，见安装说明的“从源码开发”；运行包不要求作者的本机工作树。
 
-Run the standalone app from source:
-
-```sh
-npm ci
-npm run server    # Model proxy on port 3001
-# In another terminal:
-npm run dev       # Vite app, normally on port 5173
-```
-
-Configure a model in the app or use the documented environment settings. See [setup](docs/setup.md), [features](docs/features.md), [desktop packaging](desktop/package.json), and the [CLI guide](cli/README.md). Build this checkout's CLI with `npm run cli:build`, then run `node cli/dist/thoughtdag.mjs --help`.
-
-The [upstream project](https://github.com/chenxiachan/thoughtdag) provides its own standalone releases and product documentation. Those releases do not contain this fork's current DSH integration.
-
-## Attribution and contribution
-
-ThoughtDAG was created by Xia Chen and its upstream contributors. This fork preserves the standalone application and adds the managed DSH integration. Contributions should distinguish standalone changes from changes to `src/maintenance/` and `dsh/`.
-
-[Contributing](CONTRIBUTING.md) · [MIT license](LICENSE) · [Upstream repository](https://github.com/chenxiachan/thoughtdag)
-
-## 项目维护地图
-
-从[项目地图](docs/project/map.md)查当前能力、设计、接口与实现；验证记录独立保存。机器检索入口为 [project.yaml](docs/project/project.yaml)。资料改变时只维护相关条目，页面按需生成。
+仓库也保留 standalone 原型。其历史介绍与构建方式见 [原根 README 快照](docs/history/20260922-README.md)，这部分不作为当前 DSH 部署流程。之前依赖 Maintenance 的说明也仅作为历史保留。
