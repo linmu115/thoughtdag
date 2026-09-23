@@ -1,44 +1,23 @@
 ---
 id: IMP-write-access-20260921
 kind: implementation
-title: 待决：sessionWriteAccess 未进入注入列表
+title: 可选写入许可服务的断开与恢复
 status: current
-summary: managed-graph 的写入口会调用 sessionWriteAccess.assertWritable()，但 managed-entry 的 inject 列表里没有它；未装 Maintenance 时正确，接入后恢复期会被绕过。
-progress: pending
-gap: 尚未决定是否对齐宿主官方消费者的「曾见到该服务、断开即拒写」写法；用户已决定本轮不修。
+summary: 从未提供时支持独立运行；曾观察到服务后，断开则拒写，恢复后通过许可校验再允许。
+progress: implemented
+gap: 合成测试通过，尚未安装或完成实机动态重载验收。
 sources:
 - workspace_id: source
   path: dsh/lib/managed-graph.js
   symbol: createManagedGraph
-- workspace_id: source
-  path: dsh/lib/managed-entry.js
-  symbol: inject
 ---
 
-# 待决：sessionWriteAccess 未进入注入列表
+# 可选写入许可服务的断开与恢复
 
-**超出 0.4.14-rc2.26 会话贴纸解耦的范围，本轮只登记、未改实现。**
+2026-09-23 主任务明确授权将动态依赖修复纳入本轮，取代此前暂不修复的阶段决定。公共 `sessionWriteAccess` 仍是可选服务，不增加具体 Maintenance 依赖，也不加入插件顶层必需注入列表。
 
-`dsh/lib/managed-graph.js` 的写入口包含 `await service(ctx,'sessionWriteAccess')?.assertWritable()`，而 `dsh/lib/managed-entry.js` 的 `inject` 列表里**没有** `sessionWriteAccess`（该服务由 Maintenance 提供）。
+`createManagedGraph` 通过动态注入记住服务曾经出现；从未出现时允许独立写入。一旦出现过，断开期间拒绝 POST 写入，但 GET 阅读保持可用。重新注册并允许写入后恢复；异步许可检查跨越提供者切换时拒绝旧请求，要求重试。具体修复与验证分别见 [[IMP-client-lifetime-20260923]]、[[VER-client-lifetime-20260923]]。
 
-## 当前为什么正确
+## 历史决定
 
-未装 Maintenance 的实例上，`ctx.get('sessionWriteAccess')` 返回 undefined，可选链直接跳过 —— 写入不受影响，这正是当前部署的形态。
-
-## 将来的风险
-
-adapter 接入 Maintenance 后，若 Maintenance 正处于恢复期（`assertWritable` 会挂起或拒绝），这个可选项仍然不会生效：因为 `inject` 列表里没有它，插件不会等待该服务就绪，也不会在它断开时拒绝写入。
-
-宿主官方消费者的写法是「记住曾见到该服务；若它断开则拒绝写入」（见 annotation-core 的 `assertSessionWritable`），本插件尚未对齐。
-
-## 待决内容
-
-1. 是否把 `sessionWriteAccess` 加进 `inject`（会让插件等待该服务，改变加载时序）。
-2. 是否采用官方消费者的「曾见到 + 断开即拒写」语义。
-3. 该决定属于 adapter 接入工作，还是本插件的独立改动。
-
-**不要在没有对应 adapter 接入决策的情况下顺手改实现。**
-
-## 用户决定（2026-09-21）
-
-**本轮不修，按现状记账。** 用户明确：「先不修，等以后需要自动回归时再补」。届时可选的实现路径是补上 adapter 接入与写入门语义，或在 adapter 工作里一并处理。本记录保留为待决项，不因发布 rc2.26 而改变状态。
+2026-09-21 的会话贴纸解耦范围没有修复此项，用户当时明确「先不修，等以后需要自动回归时再补」。原记录指出可选链会在服务消失后跳过许可；该阶段只登记待决，不因 rc2.26 发布而声称完成。2026-09-23 的新授权与当前实现替代这一待决状态，保留本条记录 ID 供历史链接使用。

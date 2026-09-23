@@ -22,6 +22,13 @@ window.__ModuleLoader__.load({
 
     module.exports.inject = ['sessions', 'slots']
     module.exports.apply = ctx => {
+      const lifetime = new AbortController()
+      const assertActive = () => lifetime.signal.throwIfAborted()
+      let coreEpoch = 0
+      const assertCoreEpoch = epoch => {
+        assertActive()
+        if (epoch !== coreEpoch) throw new Error('引用服务已重新加载，请重试操作')
+      }
       const currentSession = () => {
         const snapshot = ctx.sessions.list.getSnapshot()
         const id = snapshot.current
@@ -62,7 +69,7 @@ window.__ModuleLoader__.load({
 
       // the plugin's version, for the canvas's update dialog and release history
       let pluginVersion = null
-      fetch('/thoughtdag/api/version').then(r => (r.ok ? r.json() : null)).then(j => { if (j && typeof j.version === 'string') pluginVersion = j.version }).catch(() => {})
+      fetch('/thoughtdag/api/version', { signal: lifetime.signal }).then(r => (r.ok ? r.json() : null)).then(j => { if (!lifetime.signal.aborted && j && typeof j.version === 'string') pluginVersion = j.version }).catch(() => {})
 
       // store 由本文件自行维护：setMap 是唯一写入口，既切 overlay（命令式
       // DOM），也通知 Switch 组件重渲染 active 态。不走 slots 的 store/inject
@@ -149,10 +156,12 @@ window.__ModuleLoader__.load({
       const motionChanged = () => { if (motion.matches) settleTransition() }
       motion.addEventListener('change', motionChanged)
 
-      const send = (type, payload) => frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin)
+      const send = (type, payload) => { if (!lifetime.signal.aborted) frame.contentWindow?.postMessage({ source: 'dsh-thoughtdag', type, ...payload }, location.origin) }
       const graphJson = async path => {
-        const response = await fetch('/thoughtdag/api/managed/' + path, { credentials: 'same-origin', signal: AbortSignal.timeout(25_000) })
+        assertActive()
+        const response = await fetch('/thoughtdag/api/managed/' + path, { credentials: 'same-origin', signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(25_000)]) })
         const value = await response.json()
+        assertActive()
         if (!response.ok) throw new Error(typeof value.error === 'string' ? value.error : value.error?.message || '会话图暂不可用')
         return value
       }
@@ -166,6 +175,22 @@ window.__ModuleLoader__.load({
       // 就是归属关系，不需要用户再选一次，也不需要自己比对路径。
       // 宿主加载顺序可能让 workspaces 尚未就绪，所以这里等它就绪再解析。
       const currentWorkspace = session => new Promise((resolve, reject) => {
+        let settled = false, fiber, timer
+        const cleanup = () => {
+          window.clearTimeout(timer)
+          lifetime.signal.removeEventListener('abort', cancelled)
+          // An already available dependency may invoke the callback before
+          // inject returns its fiber; release it after that assignment.
+          Promise.resolve().then(() => fiber?.dispose()).catch(error => console.warn('[thoughtdag] workspace wait cleanup failed', error))
+        }
+        const finish = (error, result) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          if (error) reject(error)
+          else resolve(result)
+        }
+        const cancelled = () => finish(lifetime.signal.reason)
         const read = () => {
           const id = session?.id ?? ctx.sessions.list.getSnapshot().current
           if (id === undefined) throw new Error('尚未选择会话，无法确定工作区')
@@ -178,45 +203,61 @@ window.__ModuleLoader__.load({
           throw new Error('当前会话尚未归属任何工作区，无法确定新会话的位置')
         }
         const settle = () => {
-          try { resolve(read()) } catch (error) { reject(error) }
+          try { assertActive(); finish(undefined, read()) } catch (error) { finish(error) }
         }
-        let pending = false
+        if (lifetime.signal.aborted) { cancelled(); return }
+        lifetime.signal.addEventListener('abort', cancelled, { once: true })
+        let available
+        try { available = ctx.get?.('workspaces') } catch { /* wait for optional service */ }
+        if (available !== undefined || typeof ctx.inject !== 'function') { settle(); return }
+        timer = window.setTimeout(settle, 25_000)
         try {
-          pending = typeof ctx.inject === 'function' && ctx.inject(['workspaces'], () => settle()) !== undefined
-        } catch { pending = false }
-        // inject 只回答以后；已经就绪时直接结算，未就绪则由注入回调结算一次。
-        if (ctx.get?.('workspaces') !== undefined || !pending) settle()
+          fiber = ctx.inject(['workspaces'], () => { settle() })
+          if (!fiber) settle()
+        } catch (error) { finish(error) }
       })
       const managedAction = async (operation, input) => {
+        assertActive()
+        const operationCoreEpoch = coreEpoch
         if (!input || typeof input !== 'object') throw new Error('操作内容无效')
         if (operation === 'current-workspace') return currentWorkspace(currentSession())
         if (operation === 'open-session') {
           if (typeof input.nativeSessionId !== 'string' || !input.nativeSessionId.trim() || input.nativeSessionId.length > 256 || input.logicalSessionId !== undefined)
             throw new Error('打开会话需要已解析的原生会话身份，请重新选择目标')
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
+          assertActive()
           const referenceIds = input.referenceIds ?? []
           if (!Array.isArray(referenceIds) || referenceIds.length > 50 || referenceIds.some(id => typeof id !== 'string' || !id || id.length > 256)) throw new Error('入向引用身份无效或超过单次额度')
           const uniqueReferences = [...new Set(referenceIds)].sort()
           if (uniqueReferences.length) {
+            assertCoreEpoch(operationCoreEpoch)
             const core = annotation()
             if (!core.features.includes('session-main-graph-v2') || typeof core.prepareGraphReferences !== 'function') throw new Error('请更新注释插件以准备主干入向引用')
             await core.prepareGraphReferences(target.nativeSessionId, uniqueReferences)
+            assertCoreEpoch(operationCoreEpoch)
           }
+          assertActive()
           await ctx.sessions.refresh()
+          assertActive()
+          if (uniqueReferences.length) assertCoreEpoch(operationCoreEpoch)
           await ctx.sessions.open(target.nativeSessionId)
+          assertActive()
           setMap(false); syncCurrent()
           return target
         }
         if (operation === 'add-reference' || operation === 'stage-reference') {
-          const core = annotation()
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.targetSessionId))
+          assertCoreEpoch(operationCoreEpoch)
+          const core = annotation()
           if (operation === 'add-reference') setMap(false)
           return core.addCrossSessionReference(target.nativeSessionId, input.capture, { operationId: input.operationId })
         }
         if (operation === 'delete-reference') {
-          const core = annotation()
           const target = await graphJson('resolve?nativeSessionId=' + encodeURIComponent(input.nativeSessionId))
+          assertCoreEpoch(operationCoreEpoch)
+          const core = annotation()
           const link = await core.resolveReferenceLink(target.nativeSessionId, input.referenceId)
+          assertCoreEpoch(operationCoreEpoch)
           if (!link) return { deleted: true }
           if (link.state === 'deleted') return { deleted: true }
           return core.deleteReferenceLink(target.nativeSessionId, link.setId, link.referenceId)
@@ -224,6 +265,7 @@ window.__ModuleLoader__.load({
         if (operation === 'open-object') {
           if (!['annotation', 'obsidian-links'].includes(input.namespace)) throw new Error('未接入这个对象类型')
           const detail = await graphJson('object?' + new URLSearchParams({ namespace: input.namespace, objectId: input.objectId }))
+          assertActive()
           if (detail.object.deleted) throw new Error('该对象已删除')
           const body = detail.object.content.body
           if (input.namespace === 'obsidian-links') {
@@ -239,9 +281,11 @@ window.__ModuleLoader__.load({
           const logical = detail.object.content.references?.[0]?.logicalSessionId
           const query = logical ? { logicalSessionId: logical } : { nativeSessionId: body.sessionId }
           const target = await graphJson('resolve?' + new URLSearchParams(query))
+          assertCoreEpoch(operationCoreEpoch)
           const core = annotation()
           setMap(false)
           const opened = await core.openAnnotationInSession(target.nativeSessionId, body.setId)
+          assertActive()
           if (!opened) throw new Error('来源注释暂不可用')
           return { opened: true }
         }
@@ -316,6 +360,8 @@ window.__ModuleLoader__.load({
 
       let selectionIntent = null
       const openSelection = async (kind, capture) => {
+        assertActive()
+        const operationCoreEpoch = coreEpoch
         let fixed = capture
         if (capture) {
           if (capture.role !== 'assistant') throw new Error('请选择已完成的 AI 回复')
@@ -337,6 +383,7 @@ window.__ModuleLoader__.load({
             fixed = { ...preview.capture, selectedText: capture.selectedText, occurrence: capture.occurrence, expectedSourceVersionId: preview.sourceVersionId }
           }
         }
+        assertCoreEpoch(operationCoreEpoch)
         selectionIntent = { id: crypto.randomUUID(), kind, capture: fixed }
         setMap(true)
         if (!mapState) { selectionIntent = null; throw new Error('请先打开主会话，再进入思维图') }
@@ -357,6 +404,8 @@ window.__ModuleLoader__.load({
         }, 'thoughtdag: source markers')
       }) : undefined
       const selectionFiber = typeof ctx.inject === 'function' ? ctx.inject(['annotationCore'], ready => {
+        ++coreEpoch
+        ready.effect(() => () => { ++coreEpoch }, 'thoughtdag: reference provider lifetime')
         const core = ready.get('annotationCore')
         if (!core?.features?.includes('native-selection-actions-v1') || !core.registerSelectionAction) return
         ready.effect(() => {
@@ -423,6 +472,7 @@ window.__ModuleLoader__.load({
       }
       window.addEventListener('message', receive)
       ctx.effect(() => () => {
+        lifetime.abort()
         void markerFiber?.dispose()
         void selectionFiber?.dispose()
         window.removeEventListener('message', receive)

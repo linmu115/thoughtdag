@@ -3,11 +3,13 @@
 > 当前运行环境：**DSH 0.1.5-rc.2 实例 / web profile**（0.1.5rc2）。其他 DSH 版本尚未验收。
 
 
-**0.4.14-rc2.27 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+**0.4.14-rc2.28 · DSH 0.1.5-rc.2 · 依赖 Annotation Core**
+
+本版为工作区等待、网络请求和 Core 动态替换补齐卸载边界；许可服务断开时暂停写入，恢复后重新核验。
 
 每个会话对应一张图，图中默认包含所属会话卡片。DAG 负责图合法性、增删和交互；图数据通过 Core 会话数据端口持久化，不建立自己的业务数据库。无需 Maintenance、Launcher、Obsidian 或普通贴纸即可打开和保存会话图。
 
-**本版把「会话贴纸」从 Maintenance 彻底解耦，并改成「一个新会话 + 一条单向拓扑边」**：在会话里选中一段已完成的 AI 回复 → 点「会话贴纸」→ **在同一个工作区新开一个真实会话**（不再让你选工作区），把这段选文以**引用**形式放进新会话的输入框**待发送**（不自动发送）。新会话的图里记一条**单向**绑定边 `source=被选段会话 → target=新会话`；被选段会话的图上不重复存这条边，它的支流由画布按反向关系呈现。
+**0.4.14-rc2.27 把「会话贴纸」从 Maintenance 彻底解耦，并改成「一个新会话 + 一条单向拓扑边」**：在会话里选中一段已完成的 AI 回复 → 点「会话贴纸」→ **在同一个工作区新开一个真实会话**（不再让你选工作区），把这段选文以**引用**形式放进新会话的输入框**待发送**（不自动发送）。新会话的图里记一条**单向**绑定边 `source=被选段会话 → target=新会话`；被选段会话的图上不重复存这条边，它的支流由画布按反向关系呈现。
 
 绑定边只表达拓扑，**不代表内容授权**：它不带 `relationId`，授权读取仍然只来自 Core 的引用，而且只在你真正发送之后生效。**不再有贴纸对象、`stickers` 命名空间、贴纸历史列表，也不再要求选择工作区**。DAG 现在只跟本地数据与宿主打交道（`/thoughtdag/api/managed/*`）；将来 Maintenance 的接入由 adapter 承担，插件本体不依赖它。
 
@@ -17,21 +19,21 @@
 
 会话页点“思维图”；右键添加已有会话/空卡片，按来源到接收目标连接并确认上下文引用。回到真实会话检查引用后自行发送。卡片加入图不等于授予来源读取权限。
 
-## 后续项（超出本版范围）
+## 动态依赖与生命周期
 
-### `sessionWriteAccess` 没有进入注入列表（待独立决策）
+### 可选写入许可服务的断开与恢复
 
-`dsh/lib/managed-graph.js` 的写入口会调用 `service(ctx,'sessionWriteAccess')?.assertWritable()`，但 `dsh/lib/managed-entry.js` 的 `inject` 列表里没有 `sessionWriteAccess`（它由 Maintenance 提供）。**当前在未装 Maintenance 的实例上完全正确** —— 可选链直接跳过。但将来 adapter 接入 Maintenance 且它正处于恢复期时，这道写入门会被绕过。宿主官方消费者的写法是「记住曾见到该服务；若它断开则拒绝写入」，本插件尚未对齐。**本轮未改实现，待独立决策。**
+`sessionWriteAccess` 保持可选，通过动态注入观察，不成为插件的必需依赖。实例从未提供这项服务时可独立写入；一旦出现过，后续写入必须通过它的 `assertWritable()`。服务暂时断开时拒绝写入但保留读取；重新注册并允许写入后恢复。许可检查过程中发生服务切换也拒绝当前操作，要求重试。不依赖提供这项公共服务的具体插件。2026-09-23 合成回归通过，实机动态重载及 UI 未验收。
 
 ## 部署方法
 
 **环境要求**：Node.js 24，可正常启动的 DSH `0.1.5-rc.2` / `web` profile。**必须先安装 Annotation Core**。不需要 Maintenance、Launcher、Obsidian 或普通贴纸。
 
-从 [Release dsh-v0.4.14-rc2.27](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.27) 下载 `dsh-thoughtdag-0.4.14-rc2.27.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
+从 [Release dsh-v0.4.14-rc2.28](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.28) 下载 `dsh-thoughtdag-0.4.14-rc2.28.tgz`（**不要**用 npm `@latest` 或上游 ThoughtDAG 桌面包代替），然后：
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.27.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.28.tgz
 ```
 
 安装顺序为 Core → DAG。安装命令会把包写进 profile 并在 `dsh.profile.bundles` 注册，**不要**再手工插入同名插件节点。随后正常重启 DSH 使新版本加载。
@@ -41,7 +43,7 @@ dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.27.tgz
 **更新**：停止 DSH，备份 DSH_HOME，`plugin add` 新 tgz，重启并刷新页面。
 **卸载**：`dsh plugin --profile web remove dsh-thoughtdag`。
 
-完整说明（安装顺序、数据保留、故障定位）：[INSTALL.md](docs/INSTALL.md)。本批为预发布，当前能力和未完成验收见 [发布验证记录](docs/RELEASE-20260920.md)。
+完整说明（安装顺序、数据保留、故障定位）：[INSTALL.md](docs/INSTALL.md)。本批为预发布，当前能力和未完成验收见 [发布验证记录](docs/RELEASE-20260923.md)。
 
 ## 已知问题
 

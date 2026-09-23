@@ -1,8 +1,10 @@
+> 2026-09-23 客户端生命周期修复：[[IMP-client-lifetime-20260923]]；35 项合成测试通过，未部署、UI 未验收。需求 [[REQ-client-lifetime-20260923]]，证据 [[VER-client-lifetime-20260923]]。
+>
 > 2026-09-22 独立构建与当前版本：[[IMP-portable-build-20260922]]；运行环境 **DSH 0.1.5-rc.2 / web profile**。
 
 # ThoughtDAG · DSH 会话思维图
 
-2026-09-21 会话贴纸解耦与自持：**会话贴纸不再依赖 Maintenance**，改成「一个新会话 + 一条单向拓扑边」。选段 → 点「会话贴纸」→ 在当前工作区新建真实会话（不再选工作区），选段以引用形式进入新会话输入框待发送；新会话图里只写一条 `source=被选段会话 → target=新会话` 的 `bound` 边，被选段会话的图不重复存。删除贴纸对象、`stickers` 命名空间、贴纸历史列表与 `sticker` 图节点。决定见 [[DEC-sticker-independent-20260921]]，后端路由见 [[MOD-host-server]]，画布交互见 [[MOD-canvas]]，历史接入见 [[IF-maintenance-consumer]]（已 superseded），待决的写入门见 [[IMP-write-access-20260921]]，本次构建与打包见 [[IMP-sticker-release-20260921]]。
+2026-09-21 会话贴纸解耦与自持：**会话贴纸不再依赖 Maintenance**，改成「一个新会话 + 一条单向拓扑边」。选段 → 点「会话贴纸」→ 在当前工作区新建真实会话（不再选工作区），选段以引用形式进入新会话输入框待发送；新会话图里只写一条 `source=被选段会话 → target=新会话` 的 `bound` 边，被选段会话的图不重复存。删除贴纸对象、`stickers` 命名空间、贴纸历史列表与 `sticker` 图节点。决定见 [[DEC-sticker-independent-20260921]]，后端路由见 [[MOD-host-server]]，画布交互见 [[MOD-canvas]]，历史接入见 [[IF-maintenance-consumer]]（已 superseded），写入门现状见 [[IMP-write-access-20260921]]，本次构建与打包见 [[IMP-sticker-release-20260921]]。
 
 2026-09-21 上游拓扑绑定：连线只写 `bound` 边，不创建引用、不读取内容。设计边界见 [[DEC-reference-vs-binding]]，需求与验收范围见 [[REQ-upstream-binding]]，实现现状与未修问题见 [[IMP-binding-20260921]]，测试范围见 [[VER-binding]]。
 
@@ -22,7 +24,7 @@
 - **想了解怎么操作**：[[REQ-upstream-binding|连线做与不做什么]]、[[REQ-create|右键和开始会话]]、[[REQ-remove|撤销与刷新]]、[[MOD-source-reading|来源预览与上下文面板]]。
 - **想查负责模块**：[[MOD-managed|插件总览]] → 会话外壳、画布编辑、图状态合并、来源面板、宿主桥接；[架构图](map-node:architecture/managed)中的节点可继续打开对应记录。
 - **想改外部接入**：[[IF-integration|协作入口]] → [[IF-suite-consumer|接入 Annotation 与 note 对象]]、[[IF-upstream-notice|上游拓扑如何告知模型]]、[[IF-maintenance-consumer|（历史）Maintenance 接入已解除]]。合同留在提供方唯一位置。
-- **想判断做到哪**：[[IMP-current|当前实现与限制]]、[[IMP-binding-20260921|绑定实现与三项未修]]、[[IMP-write-access-20260921|待决的写入门]]；[[VER-product-evidence|历史产品验证]]、[[VER-binding|本轮测试范围]]与[[VER-adoption|本次地图验证]]各自说明范围。
+- **想判断做到哪**：[[IMP-current|当前实现与限制]]、[[IMP-binding-20260921|绑定实现与三项未修]]、[[IMP-write-access-20260921|可选写入许可与恢复]]；[[VER-product-evidence|历史产品验证]]、[[VER-binding|本轮测试范围]]与[[VER-adoption|本次地图验证]]各自说明范围。
 
 ## 项目身份和范围
 
@@ -41,7 +43,7 @@ Maintenance 是独立提供方；DSH–Obsidian Suite 在引用与对象导航�
 1. 上游绑定对模型**不可读**：绑定不等于读取授权，模型只能读用户实际提交的引用；是否新增 `upstreamRead` 风格工具尚未决定（详见 [[IMP-binding-20260921]]）。
 2. 会话贴纸的**实机端到端未验收**：真实实例里「新建空会话 → 打开 → Core 把待发送引用放进目标输入框」的时序只做了结构核查，需要装包重启后的实例才能验收（[[DEC-sticker-independent-20260921]]）。
 3. 来源标记的 `sourceOccurrence` 固定为 0：本地 `annotation-upstream` 记录不含来源正文，重复文本场景的精确落点可能偏。
-4. `sessionWriteAccess` 未进 `inject` 列表：未装 Maintenance 时正确，adapter 接入后其恢复期会被绕过（[[IMP-write-access-20260921]]，本轮未改实现）。
+4. 可选 `sessionWriteAccess` 的断开保护已经在源码修复，未提供时仍支持独立运行；新增动态依赖测试通过，但本次未部署、实机重载未验收（[[IMP-write-access-20260921]]）。
 
 会话贴纸对象与 `stickers` 命名空间已删除，原先「打开贴纸对象跳转失败」这条限制随功能移除，不再适用。
 

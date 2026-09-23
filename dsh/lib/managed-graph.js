@@ -65,6 +65,25 @@ async function bodyOf(req) {
 
 /** Instance-bound bridge. It never accepts Engine credentials, paths or a run ID. */
 export function createManagedGraph(ctx) {
+  ctx.effect?.(() => () => { localGraphs.delete(ctx) }, 'thoughtdag: graph provider cache')
+  let writeAccessSeen = service(ctx, 'sessionWriteAccess') !== undefined
+  let writeAccessEpoch = 0
+  ctx.inject?.(['sessionWriteAccess'], scope => {
+    writeAccessSeen = true
+    ++writeAccessEpoch
+    scope.effect(() => () => { ++writeAccessEpoch }, 'thoughtdag: write access provider')
+  })
+  async function assertWritable() {
+    const access = service(ctx, 'sessionWriteAccess')
+    if (access !== undefined) writeAccessSeen = true
+    if (!writeAccessSeen) return
+    if (typeof access?.assertWritable !== 'function') throw new ManagedGraphError(503, '会话写入许可服务暂不可用，请等待恢复')
+    const epoch = writeAccessEpoch
+    await access.assertWritable()
+    if (epoch !== writeAccessEpoch || typeof service(ctx, 'sessionWriteAccess')?.assertWritable !== 'function') {
+      throw new ManagedGraphError(503, '会话写入许可服务已重新加载，请重试操作')
+    }
+  }
   async function dispatch(operation, method, query, input) {
     const { graph, bridge, mode = 'local' } = capabilities(ctx)
     if (operation === 'status' && method === 'GET') {
@@ -82,7 +101,7 @@ export function createManagedGraph(ctx) {
         nativeContext: service(ctx, 'sessionNativeContext')?.protocolVersion === 1 && typeof service(ctx, 'sessionNativeContext')?.requestAsUser === 'function' }, ...(reason ? { reason } : {}) }
     }
     if (!graph || !bridge) throw new ManagedGraphError(503, '当前实例缺少匹配的会话图接口或存储，请检查 Core 与会话数据服务')
-    if (method === 'POST') await service(ctx, 'sessionWriteAccess')?.assertWritable()
+    if (method === 'POST') await assertWritable()
     if (method === 'POST' && operation === 'native-context') {
       const nativeContext = service(ctx, 'sessionNativeContext')
       if (nativeContext?.protocolVersion !== 1 || typeof nativeContext.requestAsUser !== 'function') throw new ManagedGraphError(503, '当前实例尚未接入原生上下文管理，请安装匹配版本')

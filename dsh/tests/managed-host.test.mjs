@@ -21,6 +21,7 @@ async function fixture(t, options = {}) {
   const services = { sessionExtensionData: data, sessionReferenceContext: references,
     maintenanceGraph: forbidden, maintenanceKnowledge: forbidden, maintenanceExtensionData: forbidden }
   if (options.missing) for (const name of options.missing) delete services[name]
+  const injections = []
   const ctx = {
     get: key => services[key], sessions, workspaceRegistry: { list: () => [{ id: 'workspace', title: 'Workspace' }], get: id => id === 'workspace' ? { id } : undefined },
     sessionController: {
@@ -37,6 +38,12 @@ async function fixture(t, options = {}) {
     },
     webServer: { register: route => { routes.push(route); return () => { routes.splice(routes.indexOf(route), 1) } } },
     effect: fn => { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose) },
+    inject(names, callback) {
+      const registration = { names, callback, disposers: [] }
+      injections.push(registration)
+      if (names.every(name => services[name] !== undefined)) callback({ effect: fn => registration.disposers.push(fn()) })
+      disposers.push(() => { for (const dispose of registration.disposers.splice(0)) dispose?.() })
+    },
     logger: { info() {} },
   }
   await apply(ctx, options.config)
@@ -67,7 +74,21 @@ async function fixture(t, options = {}) {
     })
   }
   const api = (operation, opts) => send('/thoughtdag/api/managed/' + operation, opts)
-  return { api, send, ctx, data, calls, routes, sessions, persisted, services, origin }
+  return { api, send, ctx, data, calls, routes, sessions, persisted, services, origin,
+    async restart() {
+      for (const dispose of disposers.splice(0).reverse()) await dispose()
+      injections.splice(0)
+      await apply(ctx, options.config)
+    },
+    publishService(name, value) {
+      for (const item of injections.filter(item => item.names.includes(name))) for (const dispose of item.disposers.splice(0)) dispose?.()
+      if (value === undefined) delete services[name]
+      else services[name] = value
+      for (const item of injections.filter(item => item.names.includes(name))) {
+        if (item.names.every(key => services[key] !== undefined)) item.callback({ effect: fn => item.disposers.push(fn()) })
+      }
+    },
+  }
 }
 
 test('Core-only ports work even when incompatible Maintenance services are present', async t => {
@@ -91,6 +112,48 @@ test('registered write access pauses graph mutations without blocking existing r
   f.services.sessionWriteAccess = { assertWritable: async () => { throw new Error('write paused') } }
   assert.match((await f.api('ensure', { method: 'POST', body: { logicalSessionId: 'other' } })).body.error, /write paused/)
   assert.equal((await f.api('canvas?objectId=' + first.body.objectId)).status, 200)
+})
+
+test('observed write access cannot be bypassed during provider removal and is restored on re-registration', async t => {
+  const f = await fixture(t)
+  const first = await f.api('ensure', { method: 'POST', body: { logicalSessionId: 'owner' } })
+  assert.equal(first.status, 200)
+  // Observe appearance and disappearance with no intervening write request.
+  f.publishService('sessionWriteAccess', { assertWritable: async () => {} })
+  f.publishService('sessionWriteAccess', undefined)
+  assert.equal((await f.api('canvas?objectId=' + first.body.objectId)).status, 200)
+  const create = { method: 'POST', body: { operationId: 'after-loss', workspaceId: 'workspace' } }
+  assert.equal((await f.api('create-session', create)).status, 503)
+  assert.equal(f.calls.some(call => call[0] === 'create'), false)
+  f.publishService('sessionWriteAccess', { assertWritable: async () => {} })
+  assert.equal((await f.api('create-session', create)).status, 200)
+  assert.equal(f.calls.filter(call => call[0] === 'create').length, 1)
+})
+
+test('write permission resolved by a replaced provider cannot authorize native creation', async t => {
+  const f = await fixture(t)
+  let release, entered
+  const waiting = new Promise(resolve => { entered = resolve })
+  f.publishService('sessionWriteAccess', { assertWritable: () => { entered(); return new Promise(resolve => { release = resolve }) } })
+  const response = f.api('create-session', { method: 'POST', body: { operationId: 'replacement', workspaceId: 'workspace' } })
+  await waiting
+  f.publishService('sessionWriteAccess', { assertWritable: async () => {} })
+  release()
+  assert.equal((await response).status, 503)
+  assert.equal(f.calls.some(call => call[0] === 'create'), false)
+})
+
+test('restarting the same host context rebuilds graph ports from the current providers', async t => {
+  const f = await fixture(t)
+  assert.equal((await f.api('status')).status, 200)
+  let newDirectory = 0, newReady = 0
+  f.services.sessionReferenceContext = { ...f.services.sessionReferenceContext, directory: async () => { newDirectory++; return { items: [], nextCursor: null } } }
+  f.services.sessionExtensionData = { ...f.data, ready: async (...args) => { newReady++; await f.data.ready(...args) } }
+  await f.restart()
+  assert.equal((await f.api('status')).status, 200)
+  assert.equal(newDirectory, 1)
+  assert.equal((await f.api('ensure', { method: 'POST', body: { logicalSessionId: 'restored' } })).status, 200)
+  assert.ok(newReady > 0)
 })
 test('graph validation and revision checks protect public session storage', async t => {
   const f = await fixture(t), result = await f.api('ensure', { method: 'POST', body: { logicalSessionId: 'owner' } })

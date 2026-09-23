@@ -3,7 +3,7 @@
 > 当前运行环境：**DSH 0.1.5-rc.2 实例 / web profile**（0.1.5rc2）。其他 DSH 版本尚未验收。
 
 
-**0.4.14-rc2.27 · DSH 0.1.5-rc.2 · Node.js 24**
+**0.4.14-rc2.28 · DSH 0.1.5-rc.2 · Node.js 24**
 
 为每个 DSH 会话提供可编辑思维图：放入真实会话卡片、组织上下游关系、创建会话贴纸，并回到原生会话继续对话。
 
@@ -15,11 +15,11 @@
 
 ## 安装
 
-先安装 Annotation Core，再从 [dsh-v0.4.14-rc2.27 Release](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.27) 下载 `dsh-thoughtdag-0.4.14-rc2.27.tgz`。不要用 npm 旧包或 standalone 桌面包代替。
+先安装 Annotation Core，再从 [dsh-v0.4.14-rc2.28 Release](https://github.com/linmu115/thoughtdag/releases/tag/dsh-v0.4.14-rc2.28) 下载 `dsh-thoughtdag-0.4.14-rc2.28.tgz`。不要用 npm 旧包或 standalone 桌面包代替。
 
 ```powershell
 $env:DSH_HOME = '<你的 DSH_HOME>'
-dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.27.tgz
+dsh plugin --profile web add ./dsh-thoughtdag-0.4.14-rc2.28.tgz
 ```
 
 安装到原来的 Home/profile，再按原来的方式正常启动 DSH。无需手工重复注册 bundle。[完整安装说明](dsh/docs/INSTALL.md)。
