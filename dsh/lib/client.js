@@ -20,7 +20,7 @@ window.__ModuleLoader__.load({
     const module = { exports: {} }
     const React = require('react')
 
-    module.exports.inject = ['sessions', 'slots']
+    module.exports.inject = ['sessions', 'slots', 'uiWorkspace']
     module.exports.apply = ctx => {
       const lifetime = new AbortController()
       const assertActive = () => lifetime.signal.throwIfAborted()
@@ -31,7 +31,7 @@ window.__ModuleLoader__.load({
       }
       const currentSession = () => {
         const snapshot = ctx.sessions.list.getSnapshot()
-        const id = snapshot.current
+        const id = Object.entries(snapshot.byId ?? {}).find(([, row]) => (row.retainedBy?.mainView ?? 0) > 0)?.[0]
         if (id === undefined) return null
         const session = snapshot.byId[id]
         const readable = value => typeof value === 'string' && value.trim() && value.trim() !== id ? value.trim() : null
@@ -192,7 +192,7 @@ window.__ModuleLoader__.load({
         }
         const cancelled = () => finish(lifetime.signal.reason)
         const read = () => {
-          const id = session?.id ?? ctx.sessions.list.getSnapshot().current
+          const id = session?.id ?? currentSession()?.id
           if (id === undefined) throw new Error('尚未选择会话，无法确定工作区')
           let items = []
           try { items = ctx.get('workspaces')?.list?.getSnapshot()?.items ?? [] } catch { items = [] }
@@ -240,7 +240,7 @@ window.__ModuleLoader__.load({
           await ctx.sessions.refresh()
           assertActive()
           if (uniqueReferences.length) assertCoreEpoch(operationCoreEpoch)
-          await ctx.sessions.open(target.nativeSessionId)
+          await ctx.uiWorkspace.openSession(target.nativeSessionId)
           assertActive()
           setMap(false); syncCurrent()
           return target
@@ -464,8 +464,8 @@ window.__ModuleLoader__.load({
         if (event.data.type === 'td:select-session' && typeof event.data.session === 'string') {
           // 0.1.2 renamed the selector: the ISessions contract exposes open(id);
           // older runtimes (0.1.1) still call it select
-          const select = ctx.sessions.open ?? ctx.sessions.select
-          select.call(ctx.sessions, event.data.session)
+          const select = ctx.uiWorkspace.openSession
+          select.call(ctx.uiWorkspace, event.data.session)
           if (event.data.close !== false) setMap(false)
           syncCurrent()
         }

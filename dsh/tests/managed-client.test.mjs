@@ -25,7 +25,8 @@ function fixture(prepare = async () => ({ preparedCount: 1 }), options = {}) {
   const window = { addEventListener, removeEventListener, setTimeout: fn => { const id = {}; timers.set(id, fn); return id }, clearTimeout: id => timers.delete(id), matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), __ModuleLoader__: { load: input => { module = input.factory(() => ({})) } } }
   runInNewContext(source, { window, document, location: { origin }, console, ResizeObserver: class { disconnect() {} observe() {} }, AbortController, AbortSignal, Error, URLSearchParams, fetch: options.fetch ?? (async url => ({ ok: true, json: async () => url.endsWith('/version') ? { version: 'fixture' } : { nativeSessionId: 'native-target', logicalSessionId: 'logical-target' } })) })
   const ctx = {
-    sessions: { list: { getSnapshot: () => ({ current: 'native-target', byId: { 'native-target': { displayTitle: 'Target' } } }), subscribe: fn => { onSessionChange = fn; return () => calls.push(['unsubscribe']) } }, refresh: async () => { calls.push(['refresh']); await options.refresh?.() }, open: async id => calls.push(['open', id]) },
+    sessions: { list: { getSnapshot: () => ({ current: 'native-target', byId: { 'native-target': { displayTitle: 'Target', retainedBy: { mainView: 1 } } } }), subscribe: fn => { onSessionChange = fn; return () => calls.push(['unsubscribe']) } }, refresh: async () => { calls.push(['refresh']); await options.refresh?.() }, open: async () => { throw new Error('Removed sessions.open must never be used') } },
+    uiWorkspace: { openSession: async id => calls.push(['open', id]) },
     // Cordis may return a different service proxy for each access.
     get: name => name === 'workspaces' ? workspaces : core && Object.create(core),
     inject: (names, callback) => {
