@@ -1,6 +1,6 @@
 # DSH 0.2.1-rc.2 candidate
 
-This candidate targets exactly DSH 0.2.1-rc.2 (687f282e8625c6b8d11ff58211a90524be2e4317). Host APIs are peers, resolved from that current local host for verification; no old host runtime is bundled. Development dependencies are local links because this exact release is not published to npm. The source lockfile records those links.
+This candidate targets exactly DSH 0.2.1-rc.2 (687f282e8625c6b8d11ff58211a90524be2e4317). Host APIs are peers, resolved from that current local host for verification; no old host runtime is bundled. The ThoughtDAG SPA uses its npm lockfile. The coordinated Core, Bridge and Sticker packages use local host development links, documented in their own build guides.
 
 Annotation protocol 2, Sticker protocol 1 and Bridge lifecycle protocol 3 are unchanged. Existing Obsidian Companion 0.7.0-dsh02.2 remains the protocol counterpart. No Vault binding or sync scope is migrated automatically.
 
